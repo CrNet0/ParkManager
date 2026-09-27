@@ -10,7 +10,7 @@ type BatchCase = { index: number; seed: number; width: number; height: number;
   centerPlacement: string; arrangementPlacement: string; errors: string[];
   plan: { centers: { x: number; y: number; Radius: number }[];
     furniture: { kind: string; x: number; y: number; FootprintRadius: number }[];
-    routes: { ax: number; ay: number; bx: number; by: number }[] } };
+    } };
 type BatchReport = { count: number; failed: number; cases: BatchCase[] };
 type LivePlan = { seed: number; error?: string;
   paths: { ax: number; ay: number; bx: number; by: number; hidden: boolean }[];
@@ -103,13 +103,13 @@ function App() {
   const mapX = (x: number) => 80 + x * scaleX;
   const mapY = (y: number) => 140 + y * scaleY;
   const onMapClick = (event: React.MouseEvent<SVGSVGElement>) => {
-    if (report) return;
+    if (report || get('PathBuildPresent') || get('PathBuildBusy') || get('DecorationBuildBusy')) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const point = { x: (event.clientX - rect.left) / rect.width * 900,
       y: (event.clientY - rect.top) / rect.height * 600 };
     if (plannerMode && polygonValid) {
       const next = [...entrances, point]; setEntrances(next);
-      setLivePlan(null); set('PathPlanReady', false);
+      setLivePlan(null); set('PathPlanReady', false); set('DecorationPlanReady', false);
       set('EntranceCount', next.length); return;
     }
     if (polygonClosed) return;
@@ -155,7 +155,6 @@ function App() {
       <svg viewBox="0 0 900 600" preserveAspectRatio="none" onClick={onMapClick}>
         {current ? <>
           <polygon points={`${mapX(0)},${mapY(0)} ${mapX(current.width)},${mapY(0)} ${mapX(current.width)},${mapY(current.height)} ${mapX(0)},${mapY(current.height)}`} />
-          {current.plan.routes.map((route, i) => <line key={i} x1={mapX(route.ax)} y1={mapY(route.ay)} x2={mapX(route.bx)} y2={mapY(route.by)} stroke="#bde5ed" strokeWidth="2" strokeDasharray="5 4" />)}
           {current.plan.centers.map((center, i) => <circle key={i} cx={mapX(center.x)} cy={mapY(center.y)} r={center.Radius * Math.min(scaleX, scaleY)} fill="#479ec0" stroke="white" strokeWidth="2" />)}
           {current.plan.furniture.map((item, i) => <circle key={i} cx={mapX(item.x)} cy={mapY(item.y)} r={Math.max(4, item.FootprintRadius * Math.min(scaleX, scaleY))} fill={item.kind === 'Bench' ? '#ad7c4b' : item.kind === 'Tree' ? '#43a761' : '#e7c452'}><title>{item.kind}</title></circle>)}
         </> : previewPoints.length > 0 ? <>

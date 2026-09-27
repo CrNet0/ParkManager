@@ -39,11 +39,81 @@ test('outline clicks lead to entrances and a live path preview', async ({ page }
   await progressSteps.nth(2).click();
   await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '1');
   await map.click({ position: { x: 610, y: 360 } });
-  await expect(footer.locator('button').last()).toBeEnabled();
-  await footer.locator('button').last().click();
+  const createVariant = footer.getByRole('button', { name: 'Variante erstellen' });
+  const continueToFurnishings = footer.getByRole('button', {
+    name: 'Weiter zur Ausstattung' });
+  await expect(createVariant).toBeEnabled();
+  await createVariant.click();
   await expect.poll(() => page.locator('.map svg line').count()).toBeGreaterThan(0);
   await expect(page.getByText(/Live-Layout/)).toBeVisible();
+  await expect(continueToFurnishings).toBeDisabled();
+  await page.getByTestId('park-surface-choices')
+    .getByRole('button', { name: 'Gras 1', exact: true }).click();
+  await expect(continueToFurnishings).toBeEnabled();
+  await continueToFurnishings.click();
+  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '2');
+  await footer.getByRole('button', { name: 'Zurück zum Untergrund' }).click();
+  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '1');
+  await expect(footer.getByRole('button', { name: 'Neue Variante' }))
+    .toBeEnabled();
+  await expect(continueToFurnishings).toBeEnabled();
+  await continueToFurnishings.click();
+  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '2');
 });
+
+for (const plaza of [false, true]) {
+  test(`${plaza ? 'plaza' : 'park'} navigation preserves previews and only builds at the final step`, async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: plaza ? 'plaza' : 'paths', exact: true }).click();
+    const body = page.getByTestId('panel-body');
+    const footer = page.getByTestId('panel-footer');
+    const forward = plaza ? 'Weiter zu den Plaza-Details' : 'Weiter zur Ausstattung';
+    const back = plaza ? 'Zurück zur Grundstruktur' : 'Zurück zum Untergrund';
+    const backDetails = plaza ? 'Zurück zu den Plaza-Details' : 'Zurück zur Ausstattung';
+    const unbuilt = async () => {
+      await expect(body).toHaveAttribute('data-paths-built', 'false');
+      await expect(body).toHaveAttribute('data-decorations-built', 'false');
+    };
+    await footer.getByRole('button', { name: 'Umriss bearbeiten' }).click();
+    await expect(body).toHaveAttribute('data-stage', '0');
+    await footer.getByRole('button', { name: 'Weiter zu den Eingängen' }).click();
+    await footer.getByRole('button', { name: forward }).click();
+    await expect(body).toHaveAttribute('data-stage', '2');
+    await unbuilt();
+    await footer.getByRole('button', { name: back, exact: true }).click();
+    await expect(footer.getByRole('button', { name: 'Neue Variante' })).toBeEnabled();
+    await footer.getByRole('button', { name: forward }).click();
+    if (!plaza) {
+      await expect(footer.getByRole('button', { name: 'Weiter zum Abschluss' })).toBeDisabled();
+      await footer.getByRole('button', { name: 'Ausstattung planen' }).click();
+    }
+    await footer.getByRole('button', { name: 'Weiter zum Abschluss' }).click();
+    await expect(body).toHaveAttribute('data-stage', '3');
+    await unbuilt();
+    await footer.getByRole('button', { name: backDetails, exact: true }).click();
+    await expect(body).toHaveAttribute('data-stage', '2');
+    await footer.getByRole('button', { name: 'Weiter zum Abschluss' }).click();
+    // A rejected build keeps both previews and unlocks navigation again.
+    await page.getByRole('button', { name: 'Fehlerstatus testen' }).click();
+    await footer.getByRole('button', { name: plaza ? 'Plaza bauen' : 'Park bauen', exact: true }).click();
+    await expect(footer.getByRole('button', { name: backDetails, exact: true })).toBeDisabled();
+    await expect(footer.getByRole('button', { name: backDetails, exact: true })).toBeEnabled();
+    await unbuilt();
+    await footer.getByRole('button', { name: backDetails, exact: true }).click();
+    await footer.getByRole('button', { name: back, exact: true }).click();
+    await footer.getByRole('button', { name: 'Neue Variante' }).click();
+    await footer.getByRole('button', { name: forward }).click();
+    await footer.getByRole('button', { name: 'Weiter zum Abschluss' }).click();
+    await footer.getByRole('button', { name: plaza ? 'Plaza bauen' : 'Park bauen', exact: true }).click();
+    await expect(body).toHaveAttribute('data-decorations-built', 'true');
+    await expect(body).toHaveAttribute('data-paths-built', 'true');
+    await expect(body).toHaveAttribute('data-stage', '3');
+    await expect(footer.getByRole('button', { name: backDetails, exact: true })).toBeDisabled();
+    await footer.getByRole('button', { name: plaza ? 'Plaza fertigstellen' : 'Park fertigstellen' }).click();
+    await expect(body).toHaveAttribute('data-stage', '0');
+    await unbuilt();
+  });
+}
 
 test('path notices use explicit status and plazas call the step Structure', async ({ page }) => {
   await page.goto('/');
@@ -83,8 +153,10 @@ test('a plaza can be drawn, configured, built, furnished, and finished', async (
     .getByRole('button', { name: 'Zaun 1', exact: true });
   await fence.click();
   await expect(fence).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('plaza-surface-choices')
+    .getByRole('button', { name: 'Gras 1', exact: true }).click();
 
-  await footer.getByRole('button', { name: /Plaza planen/ }).click();
+  await footer.getByRole('button', { name: 'Variante erstellen' }).click();
   await expect(page.getByTestId('live-plan-summary')).toContainText('Plaza-Regeln');
   await expect.poll(() => page.getByTestId('live-centerpiece').count())
     .toBeGreaterThan(0);
@@ -93,13 +165,20 @@ test('a plaza can be drawn, configured, built, furnished, and finished', async (
   await expect.poll(() => page.getByTestId('live-plaza-fence').count())
     .toBeGreaterThan(0);
 
-  await footer.getByRole('button', { name: 'Plaza bauen' }).click();
+  await footer.getByRole('button', { name: 'Weiter zu den Plaza-Details' }).click();
   await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '2');
   await expectNoPanelHeadingOrStageCounter(page);
-  const removeSurface = footer.getByRole('button', { name: 'Untergrund entfernen' });
-  await expect(removeSurface).toHaveClass(/backButton/);
-  await expect(removeSurface).not.toHaveClass(/dangerButton/);
-  await expect(removeSurface.locator('img')).toHaveCSS('transform', 'matrix(-1, 0, 0, -1, 0, 0)');
+  const backToStructure = footer.getByRole('button', { name: 'Zurück zur Grundstruktur' });
+  await expect(backToStructure).toHaveClass(/backButton/);
+  await expect(backToStructure).not.toHaveClass(/dangerButton/);
+  await expect(backToStructure.locator('img')).toHaveCSS('transform', 'matrix(-1, 0, 0, -1, 0, 0)');
+  await backToStructure.click();
+  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '1');
+  const continueToDetails = footer.getByRole('button', {
+    name: 'Weiter zu den Plaza-Details' });
+  await expect(continueToDetails).toBeEnabled();
+  await continueToDetails.click();
+  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '2');
   const slots = page.getByTestId('plaza-arrangement-slots');
   await slots.getByTitle('Element hinzufügen').click();
   await page.getByTestId('plaza-arrangement-picker')
@@ -108,10 +187,18 @@ test('a plaza can be drawn, configured, built, furnished, and finished', async (
     .getByRole('button', { name: 'Laterne 1', exact: true }).click();
   await expect(slots.getByRole('button').nth(1)).toContainText('Laterne 1');
 
-  await footer.getByRole('button', { name: 'Ausstattung bauen' }).click();
+  await footer.getByRole('button', { name: 'Weiter zum Abschluss' }).click();
   await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '3');
   await expectNoPanelHeadingOrStageCounter(page);
-  await expect(page.getByTestId('panel-body')).toContainText(/Plaza-Untergrund/);
+  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-paths-built', 'false');
+  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-decorations-built', 'false');
+  await footer.getByRole('button', { name: 'Zurück zu den Plaza-Details' }).click();
+  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '2');
+  await footer.getByRole('button', { name: 'Weiter zum Abschluss' }).click();
+  await footer.getByRole('button', { name: 'Plaza bauen' }).click();
+  await expect(footer.getByRole('button', { name: 'Zurück zu den Plaza-Details' })).toBeDisabled();
+  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-decorations-built', 'true');
+  await expect(page.getByTestId('panel-body')).toContainText(/Plaza-Untergrund gebaut/);
   await footer.getByRole('button', { name: 'Plaza fertigstellen' }).click();
   await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '0');
   await expect(page.getByText('Noch keine Punkte gesetzt')).toBeVisible();
@@ -159,6 +246,7 @@ test('shared plaza sliders support arrow, home, end, and page keys', async ({ pa
 test('shared sliders react to game-compatible mouse events in every workflow', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'decorated', exact: true }).click();
+  await page.getByRole('button', { name: 'Weiter zur Ausstattung' }).click();
   const plantDensity = page.getByRole('slider', { name: 'Pflanzendichte' });
   await plantDensity.click({ position: { x: 1, y: 10 } });
   await expect(plantDensity).toHaveAttribute('aria-valuenow', '25');
@@ -189,6 +277,7 @@ test('shipped panel CSS avoids unsupported CSS Grid', async ({ page }) => {
 test('asset columns use stable flex layout with uniform gaps', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'decorated', exact: true }).click();
+  await page.getByRole('button', { name: 'Weiter zur Ausstattung' }).click();
   await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '2');
   const info = await rect(page, 'asset-header');
   const sliders = await rect(page, 'density-settings');
@@ -230,6 +319,7 @@ test('mock toolbar remains below the panel at compact viewport', async ({ page }
   await page.setViewportSize({ width: 1059, height: 800 });
   await page.goto('/');
   await page.getByRole('button', { name: 'decorated', exact: true }).click();
+  await page.getByRole('button', { name: 'Weiter zur Ausstattung' }).click();
   const panel = await rect(page, 'park-panel');
   const toolbar = await page.locator('.mockbar').boundingBox();
   expect(toolbar).not.toBeNull();
@@ -241,6 +331,7 @@ test('all workflow panels preserve the same outer inset', async ({ page }) => {
   await page.goto('/');
   for (const preset of ['empty', 'paths', 'decorated']) {
     await page.getByRole('button', { name: preset, exact: true }).click();
+    if (preset === 'decorated') await page.getByRole('button', { name: 'Weiter zur Ausstattung' }).click();
     const positions = await page.evaluate(() => {
       const header = document.querySelector('[data-testid="panel-header"]')!;
       const body = document.querySelector('[data-testid="panel-body"]')!;
@@ -519,6 +610,7 @@ test('plaza detail panes have equal constrained height and one-line density', as
 test('Plaza detail header has no extra height while panes and density stay aligned', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'decorated', exact: true }).click();
+  await page.getByRole('button', { name: 'Weiter zur Ausstattung' }).click();
   const parkBody = await rect(page, 'panel-body');
   const parkHeader = await rect(page, 'asset-header');
   const parkWorkspace = await rect(page, 'asset-workspace');

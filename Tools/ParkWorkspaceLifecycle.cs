@@ -13,6 +13,31 @@ namespace ParkManager.Tools
     /// </summary>
     public sealed partial class ParkToolSystem
     {
+        private bool _buildDecorationsAfterPaths;
+
+        /// <summary>Commits both previews from the final wizard step.</summary>
+        internal void BuildPark()
+        {
+            if (PathBuildBusy || DecorationBuildBusy || DecorationEditingLocked) return;
+            if (_pathPlan == null || _decorationPlan == null)
+            {
+                PublishState("Zuerst Untergrund und Ausstattung planen.");
+                return;
+            }
+            Mod.Log.Info($"ParkManager BUILD-START type={_selectedSiteKind} "
+                + $"pathSeed={_pathPlan.Seed} decorationSeed={_decorationPlan.Seed} "
+                + $"placements={_decorationPlan.Placements.Count} retry={HasBuiltPaths}.");
+            // A failed furnishing build can be retried without duplicating paths.
+            if (HasBuiltPaths)
+            {
+                BuildDecorations();
+                return;
+            }
+            _buildDecorationsAfterPaths = true;
+            BuildPaths();
+            if (!PathBuildBusy) _buildDecorationsAfterPaths = false;
+        }
+
         /// <summary>
         /// Detaches the completed park from the editor without deleting any of
         /// its Vanilla entities, then prepares an empty outline for the next

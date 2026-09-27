@@ -633,19 +633,6 @@ namespace ParkManager.Geometry
             return true;
         }
 
-        private static float DistanceToPathsSquared(float2 point, ParkPathPlan paths)
-        {
-            if (paths == null || paths.Edges.Count == 0) return float.MaxValue;
-            var best = float.MaxValue;
-            for (var i = 0; i < paths.Edges.Count; i++)
-            {
-                var edge = paths.Edges[i];
-                best = math.min(best, DistanceToSegmentSquared(point,
-                    paths.Nodes[edge.A].Position, paths.Nodes[edge.B].Position));
-            }
-            return best;
-        }
-
         private static float DistanceToBoundarySquared(float2 point,
             IReadOnlyList<float2> polygon)
         {

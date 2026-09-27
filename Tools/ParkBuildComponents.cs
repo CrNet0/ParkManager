@@ -114,12 +114,20 @@ namespace ParkManager.Tools
     }
 
     /// <summary>
-    /// Transient hand-off between the early network cleanup and the ordinary
+    /// Persisted hand-off between the early network cleanup and the ordinary
     /// object/area cleanup after the user bulldozes the park surface anchor.
     /// </summary>
     public struct ParkBundleDeletionRequest : IComponentData,
-                                              IQueryTypeParameter
+                                              IQueryTypeParameter, ISerializable
     {
         public int EmptyPasses;
+        public void Serialize<TWriter>(TWriter writer) where TWriter : IWriter
+            => writer.Write(EmptyPasses);
+        public void Deserialize<TReader>(TReader reader) where TReader : IReader
+        {
+            reader.Read(out int ignored);
+            // Recheck references after loading instead of trusting an old pass.
+            EmptyPasses = 0;
+        }
     }
 }

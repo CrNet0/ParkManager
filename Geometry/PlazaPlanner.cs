@@ -11,12 +11,9 @@ namespace ParkManager.Geometry
     /// </summary>
     internal static class PlazaPlanner
     {
-        private const int CirculationNodeCount = 12;
         private const float CenterSafetyMargin = 0.75f;
-        private const float CirculationOffset = 1.8f;
         private const float FurnitureBoundaryClearance = 0.65f;
         private const float EntranceFurnitureClearance = 7f;
-        private const float RoutingSampleSpacing = 2f;
         private const int MaximumFurniture = 64;
 
         /// <summary>
@@ -48,7 +45,6 @@ namespace ParkManager.Geometry
             IReadOnlyList<PlazaArrangementItem> arrangement = null)
         {
             var furniture = new List<PlazaFurniturePlacement>();
-            var routes = new List<PlazaRoutingSegment>();
             var centerpieces = new List<PlazaCenterpiecePlacement>();
             centerpieceSpacing = math.clamp(centerpieceSpacing, 5f, 60f);
             arrangementSpacing = math.clamp(arrangementSpacing, 0f, 20f);
@@ -56,7 +52,7 @@ namespace ParkManager.Geometry
             if (polygon == null || polygon.Count < 3)
                 return new PlazaPlan(seed, centerPlacement, arrangementPlacement,
                     centerpieceSpacing, arrangementSpacing, centerpieces,
-                    furniture, routes);
+                    furniture);
 
             var radius = includeCenterpiece
                 && IsFinite(centerFootprintRadius)
@@ -70,7 +66,7 @@ namespace ParkManager.Geometry
                 if (!TryChooseCenter(polygon, 0f, out center))
                     return new PlazaPlan(seed, centerPlacement,
                         arrangementPlacement, centerpieceSpacing,
-                        arrangementSpacing, centerpieces, furniture, routes);
+                        arrangementSpacing, centerpieces, furniture);
             }
 
             var protectedRadius = radius > 0f
@@ -156,10 +152,10 @@ namespace ParkManager.Geometry
                         protectedRadius, arrangementSpacing,
                         arrangementWidth, maximumRadius, majorSpan, minorSpan,
                         desiredPairs, arrangement, centerpieces, polygon,
-                        entrances, routes);
+                        entrances);
                     return new PlazaPlan(seed, centerPlacement,
                         arrangementPlacement, centerpieceSpacing,
-                        arrangementSpacing, centerpieces, furniture, routes);
+                        arrangementSpacing, centerpieces, furniture);
                 }
                 var groupSize = arrangement.Count
                     * (mirroredBoundary ? 2 : 1);
@@ -175,14 +171,13 @@ namespace ParkManager.Geometry
                         break;
                     var added = TryAddBoundaryArrangement(furniture,
                         candidates[i], arrangement, centerpieces, polygon,
-                        entrances, routes, arrangementSpacing, i + 1,
+                        entrances, arrangementSpacing, i + 1,
                         mirroredBoundary, mirrorNormal, mirrorOffset);
                     if (added) acceptedGroups++;
                 }
             }
             return new PlazaPlan(seed, centerPlacement, arrangementPlacement,
-                centerpieceSpacing, arrangementSpacing, centerpieces, furniture,
-                routes);
+                centerpieceSpacing, arrangementSpacing, centerpieces, furniture);
         }
 
         private static bool TryAddArrangement(
@@ -192,7 +187,6 @@ namespace ParkManager.Geometry
             float2 center,
             IReadOnlyList<PlazaCenterpiecePlacement> centerpieces,
             IReadOnlyList<float2> polygon, IReadOnlyList<float2> entrances,
-            IReadOnlyList<PlazaRoutingSegment> routes,
             PlazaArrangementPlacementMode placementMode, float spacing,
             int arrangementId)
         {
@@ -215,11 +209,11 @@ namespace ParkManager.Geometry
                     ? 0f : anchor.Rotation + math.PI;
                 if (!FurniturePointValid(first, item.FootprintRadius,
                         centerpieces, polygon, entrances,
-                        proposed, routes, item.Kind, arrangementId,
+                        proposed, item.Kind, arrangementId,
                         placementMode, spacing)
                     || !FurniturePointValid(second, item.FootprintRadius,
                         centerpieces, polygon,
-                        entrances, proposed, routes, item.Kind,
+                        entrances, proposed, item.Kind,
                         arrangementId, placementMode, spacing)) return false;
                 proposed.Add(new PlazaFurniturePlacement
                 {
@@ -249,8 +243,7 @@ namespace ParkManager.Geometry
             FurniturePairCandidate anchor,
             IReadOnlyList<PlazaArrangementItem> arrangement,
             IReadOnlyList<PlazaCenterpiecePlacement> centerpieces,
-            IReadOnlyList<float2> polygon, IReadOnlyList<float2> entrances,
-            IReadOnlyList<PlazaRoutingSegment> routes, float spacing,
+            IReadOnlyList<float2> polygon, IReadOnlyList<float2> entrances, float spacing,
             int arrangementId, bool mirrored, float2 mirrorNormal,
             float mirrorOffset)
         {
@@ -270,7 +263,7 @@ namespace ParkManager.Geometry
                 offset += item.FootprintRadius;
                 var first = anchor.Position + anchor.Tangent * offset;
                 if (!FurniturePointValid(first, item.FootprintRadius,
-                        centerpieces, polygon, entrances, proposed, routes,
+                        centerpieces, polygon, entrances, proposed,
                         item.Kind, arrangementId,
                         PlazaArrangementPlacementMode.AlongBoundary, spacing))
                     return false;
@@ -288,7 +281,7 @@ namespace ParkManager.Geometry
                 {
                     var second = ReflectPoint(first, mirrorNormal, mirrorOffset);
                     if (!FurniturePointValid(second, item.FootprintRadius,
-                            centerpieces, polygon, entrances, proposed, routes,
+                            centerpieces, polygon, entrances, proposed,
                             item.Kind, arrangementId,
                             PlazaArrangementPlacementMode.AlongBoundary, spacing))
                         return false;
@@ -334,8 +327,7 @@ namespace ParkManager.Geometry
             float maximumRadius, float majorSpan, float minorSpan,
             int desiredPairs, IReadOnlyList<PlazaArrangementItem> arrangement,
             IReadOnlyList<PlazaCenterpiecePlacement> centerpieces,
-            IReadOnlyList<float2> polygon, IReadOnlyList<float2> entrances,
-            IReadOnlyList<PlazaRoutingSegment> routes)
+            IReadOnlyList<float2> polygon, IReadOnlyList<float2> entrances)
         {
             var innerRadius = protectedRadius + spacing + maximumRadius + 0.5f;
             var availableRadius = math.min(majorSpan, minorSpan) * 0.5f
@@ -382,7 +374,6 @@ namespace ParkManager.Geometry
                             };
                             if (!TryAddArrangement(trial, candidate, arrangement,
                                     center, centerpieces, polygon, entrances,
-                                    routes,
                                     PlazaArrangementPlacementMode.AroundCenter,
                                     spacing, pair + 1)) break;
                         }
@@ -635,7 +626,6 @@ namespace ParkManager.Geometry
             IReadOnlyList<PlazaCenterpiecePlacement> centerpieces,
             IReadOnlyList<float2> polygon, IReadOnlyList<float2> entrances,
             IReadOnlyList<PlazaFurniturePlacement> accepted,
-            IReadOnlyList<PlazaRoutingSegment> routes,
             PlazaFurnitureKind kind, int arrangementId,
             PlazaArrangementPlacementMode placementMode, float spacing)
         {
@@ -659,18 +649,6 @@ namespace ParkManager.Geometry
                     < clearanceToCenter * clearanceToCenter) return false;
             }
 
-            {
-                // Kept for compatibility with older routing-only plans. New
-                // plazas pass an empty list because their whole area is walkable.
-                var routeClearance = footprintRadius
-                    + (kind == PlazaFurnitureKind.Tree
-                        || kind == PlazaFurnitureKind.Bush ? 0.75f : 0.15f);
-                for (var i = 0; i < routes.Count; i++)
-                    if (DistanceToSegmentSquared(point, routes[i].A,
-                            routes[i].B) < routeClearance * routeClearance)
-                        return false;
-            }
-
             for (var i = 0; i < accepted.Count; i++)
             {
                 var otherRadius = accepted[i].FootprintRadius > 0f
@@ -684,207 +662,6 @@ namespace ParkManager.Geometry
                     return false;
             }
             return true;
-        }
-
-        private static bool BuildHiddenRoutingNetwork(
-            List<PlazaRoutingSegment> output, IReadOnlyList<float2> polygon,
-            IReadOnlyList<float2> entrances, float2 center, float protectedRadius,
-            IReadOnlyList<PlazaCenterpiecePlacement> centerpieces,
-            float2 majorAxis)
-        {
-            var circulationRadius = protectedRadius + CirculationOffset;
-            List<float2> ring;
-            if (centerpieces.Count > 1)
-            {
-                var extent = math.abs(math.dot(centerpieces[0].Position - center,
-                    majorAxis));
-                if (!TryBuildCapsuleRing(polygon, center, majorAxis, extent,
-                    circulationRadius, centerpieces, out ring)) return false;
-            }
-            else if (!TryBuildRing(polygon, center, protectedRadius,
-                    ref circulationRadius, out ring)) return false;
-
-            for (var i = 0; i < ring.Count; i++)
-            {
-                var next = (i + 1) % ring.Count;
-                if (SegmentInsidePolygon(ring[i], ring[next], polygon)
-                    && SegmentAvoidsCenterpieces(ring[i], ring[next],
-                        centerpieces))
-                    AddUniqueSegment(output, ring[i], ring[next]);
-            }
-
-            if (entrances == null || entrances.Count == 0) return true;
-            var nodes = new List<float2>();
-            for (var i = 0; i < ring.Count; i++) nodes.Add(ring[i]);
-            var ringNodeCount = ring.Count;
-            for (var i = 0; i < polygon.Count; i++)
-                AddUniquePoint(nodes, polygon[i]);
-            var entranceNodeIds = new List<int>();
-            for (var i = 0; i < entrances.Count; i++)
-            {
-                if (!PointInsideOrBoundary(entrances[i], polygon)) continue;
-                entranceNodeIds.Add(FindOrAddPoint(nodes, entrances[i]));
-            }
-            if (entranceNodeIds.Count == 0) return true;
-
-            var graph = BuildVisibilityGraph(nodes, polygon, centerpieces);
-            for (var i = 0; i < entranceNodeIds.Count; i++)
-            {
-                var route = ShortestRouteToRing(entranceNodeIds[i], ringNodeCount,
-                    graph, nodes);
-                if (route.Count == 0) return false;
-                for (var step = 0; step + 1 < route.Count; step++)
-                    AddUniqueSegment(output, nodes[route[step]], nodes[route[step + 1]]);
-            }
-            return true;
-        }
-
-        private static bool TryBuildCapsuleRing(IReadOnlyList<float2> polygon,
-            float2 center, float2 axis, float extent, float radius,
-            IReadOnlyList<PlazaCenterpiecePlacement> centerpieces,
-            out List<float2> ring)
-        {
-            ring = new List<float2>(14);
-            var normal = new float2(-axis.y, axis.x);
-            for (var i = 0; i <= 6; i++)
-            {
-                var angle = -math.PI * 0.5f + i * math.PI / 6f;
-                ring.Add(center + axis * extent
-                    + (axis * math.cos(angle) + normal * math.sin(angle)) * radius);
-            }
-            for (var i = 0; i <= 6; i++)
-            {
-                var angle = math.PI * 0.5f + i * math.PI / 6f;
-                ring.Add(center - axis * extent
-                    + (axis * math.cos(angle) + normal * math.sin(angle)) * radius);
-            }
-            for (var i = 0; i < ring.Count; i++)
-            {
-                var next = ring[(i + 1) % ring.Count];
-                if (!PointInsideOrBoundary(ring[i], polygon)
-                    || DistanceToBoundarySquared(ring[i], polygon) < 0.25f
-                    || !SegmentInsidePolygon(ring[i], next, polygon)
-                    || !SegmentAvoidsCenterpieces(ring[i], next, centerpieces))
-                    return false;
-            }
-            return true;
-        }
-
-        private static bool SegmentAvoidsCenterpieces(float2 a, float2 b,
-            IReadOnlyList<PlazaCenterpiecePlacement> centerpieces)
-        {
-            for (var i = 0; i < centerpieces.Count; i++)
-                if (!SegmentAvoidsCircle(a, b, centerpieces[i].Position,
-                    centerpieces[i].Radius + CenterSafetyMargin + 0.8f))
-                    return false;
-            return true;
-        }
-
-        private static bool TryBuildRing(IReadOnlyList<float2> polygon,
-            float2 center, float protectedRadius, ref float radius,
-            out List<float2> ring)
-        {
-            ring = new List<float2>();
-            var minimum = protectedRadius + 1.1f;
-            while (radius >= minimum)
-            {
-                ring.Clear();
-                var valid = true;
-                for (var i = 0; i < CirculationNodeCount; i++)
-                {
-                    var angle = math.PI * 2f * i / CirculationNodeCount;
-                    var point = center + new float2(math.cos(angle), math.sin(angle)) * radius;
-                    if (!PointInsideOrBoundary(point, polygon)
-                        || DistanceToBoundarySquared(point, polygon) < 0.25f)
-                    { valid = false; break; }
-                    ring.Add(point);
-                }
-                if (valid)
-                {
-                    for (var i = 0; i < ring.Count; i++)
-                    {
-                        var next = ring[(i + 1) % ring.Count];
-                        if (!SegmentInsidePolygon(ring[i], next, polygon)
-                            || !SegmentAvoidsCircle(ring[i], next, center,
-                                protectedRadius + 0.8f))
-                        { valid = false; break; }
-                    }
-                }
-                if (valid) return true;
-                radius -= 0.5f;
-            }
-            ring.Clear();
-            return false;
-        }
-
-        private static List<int>[] BuildVisibilityGraph(IReadOnlyList<float2> nodes,
-            IReadOnlyList<float2> polygon,
-            IReadOnlyList<PlazaCenterpiecePlacement> centerpieces)
-        {
-            var graph = new List<int>[nodes.Count];
-            for (var i = 0; i < graph.Length; i++) graph[i] = new List<int>();
-            for (var a = 0; a < nodes.Count; a++)
-            for (var b = a + 1; b < nodes.Count; b++)
-            {
-                if (!SegmentInsidePolygon(nodes[a], nodes[b], polygon)
-                    || !SegmentAvoidsCenterpieces(nodes[a], nodes[b],
-                        centerpieces))
-                    continue;
-                graph[a].Add(b);
-                graph[b].Add(a);
-            }
-            return graph;
-        }
-
-        private static List<int> ShortestRouteToRing(int start, int ringNodeCount,
-            IReadOnlyList<List<int>> graph, IReadOnlyList<float2> nodes)
-        {
-            var distance = new float[nodes.Count];
-            var previous = new int[nodes.Count];
-            var visited = new bool[nodes.Count];
-            for (var i = 0; i < distance.Length; i++)
-            {
-                distance[i] = float.MaxValue;
-                previous[i] = -1;
-            }
-            distance[start] = 0f;
-            for (var pass = 0; pass < nodes.Count; pass++)
-            {
-                var current = -1;
-                var best = float.MaxValue;
-                for (var i = 0; i < nodes.Count; i++)
-                    if (!visited[i] && distance[i] < best)
-                    { current = i; best = distance[i]; }
-                if (current < 0) break;
-                if (current < ringNodeCount)
-                    return ReconstructRoute(current, previous);
-                visited[current] = true;
-
-                for (var edge = 0; edge < graph[current].Count; edge++)
-                {
-                    var next = graph[current][edge];
-                    if (visited[next]) continue;
-                    var candidate = best + math.distance(nodes[current], nodes[next]);
-                    if (candidate >= distance[next]) continue;
-                    distance[next] = candidate;
-                    previous[next] = current;
-                }
-            }
-            return new List<int>();
-        }
-
-        private static List<int> ReconstructRoute(int end, int[] previous)
-        {
-            var route = new List<int>();
-            var current = end;
-            var guard = previous.Length + 1;
-            while (current >= 0 && guard-- > 0)
-            {
-                route.Add(current);
-                current = previous[current];
-            }
-            route.Reverse();
-            return route;
         }
 
         private static bool TryChooseCenter(IReadOnlyList<float2> polygon,
@@ -944,21 +721,6 @@ namespace ParkManager.Geometry
             return new float2((float)(x / divisor), (float)(y / divisor));
         }
 
-        private static PlazaCenterpieceKind SelectCenterpiece(int seed)
-        {
-            unchecked
-            {
-                var value = (uint)seed;
-                value ^= value >> 16;
-                value *= 0x7feb352du;
-                value ^= value >> 15;
-                value *= 0x846ca68bu;
-                value ^= value >> 16;
-                return (value & 1u) == 0u
-                    ? PlazaCenterpieceKind.Fountain : PlazaCenterpieceKind.Statue;
-            }
-        }
-
         private static float FootprintRadius(PlazaFurnitureKind kind)
         {
             switch (kind)
@@ -976,21 +738,6 @@ namespace ParkManager.Geometry
             while (angle >= full) angle -= full;
             return angle;
         }
-
-        private static bool SegmentInsidePolygon(float2 a, float2 b,
-            IReadOnlyList<float2> polygon)
-        {
-            var length = math.distance(a, b);
-            var steps = math.max(1, (int)Math.Ceiling(length / RoutingSampleSpacing));
-            for (var i = 0; i <= steps; i++)
-                if (!PointInsideOrBoundary(math.lerp(a, b, (float)i / steps), polygon))
-                    return false;
-            return true;
-        }
-
-        private static bool SegmentAvoidsCircle(float2 a, float2 b,
-            float2 center, float radius)
-            => DistanceToSegmentSquared(center, a, b) >= radius * radius;
 
         private static bool PointInsideOrBoundary(float2 point,
             IReadOnlyList<float2> polygon)
@@ -1036,37 +783,6 @@ namespace ParkManager.Geometry
             if (length < 0.0001f) return math.distancesq(point, a);
             var t = math.clamp(math.dot(point - a, ab) / length, 0f, 1f);
             return math.distancesq(point, a + ab * t);
-        }
-
-        private static void AddUniqueSegment(List<PlazaRoutingSegment> segments,
-            float2 a, float2 b)
-        {
-            if (math.distancesq(a, b) < 0.01f) return;
-            for (var i = 0; i < segments.Count; i++)
-            {
-                var existing = segments[i];
-                if (math.distancesq(existing.A, a) < 0.01f
-                        && math.distancesq(existing.B, b) < 0.01f
-                    || math.distancesq(existing.A, b) < 0.01f
-                        && math.distancesq(existing.B, a) < 0.01f)
-                    return;
-            }
-            segments.Add(new PlazaRoutingSegment { A = a, B = b });
-        }
-
-        private static void AddUniquePoint(List<float2> points, float2 point)
-        {
-            for (var i = 0; i < points.Count; i++)
-                if (math.distancesq(points[i], point) < 0.01f) return;
-            points.Add(point);
-        }
-
-        private static int FindOrAddPoint(List<float2> points, float2 point)
-        {
-            for (var i = 0; i < points.Count; i++)
-                if (math.distancesq(points[i], point) < 0.01f) return i;
-            points.Add(point);
-            return points.Count - 1;
         }
 
         private static bool IsFinite(float value)

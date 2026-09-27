@@ -30,7 +30,10 @@ export const scenario = (kind: 'empty' | 'outline' | 'paths' | 'decorated' | 'pl
     'ParkManager.PlannerMode': kind !== 'empty' && kind !== 'outline',
     'ParkManager.EntranceCount': kind === 'empty' || kind === 'outline' ? 0 : 2,
     'ParkManager.PathPlanReady': kind === 'paths' || kind === 'decorated' || plaza,
-    'ParkManager.PathBuildPresent': kind === 'decorated',
+    'ParkManager.PathBuildPresent': false,
+    'ParkManager.PathBuildBusy': false,
+    'ParkManager.DecorationBuildBusy': false,
+    'ParkManager.Status': '',
     'ParkManager.DecorationBuildPresent': false,
     'ParkManager.DecorationPlanReady': kind === 'decorated' || plaza,
     'ParkManager.SiteType': plaza ? 1 : 0,
@@ -44,6 +47,14 @@ export const scenario = (kind: 'empty' | 'outline' | 'paths' | 'decorated' | 'pl
     'ParkManager.PlazaCenterSelected': plaza ? 'Mock Fountain' : '',
     'ParkManager.Locale': 'de',
   }); emit();
+  if (kind === 'paths' || kind === 'decorated' || plaza) {
+    const choices = JSON.parse(values['ParkManager.AssetOptionsJson'] || '{}');
+    const firstSurface = choices.surface?.options?.[0]?.name;
+    if (firstSurface && !choices.surface.selected) {
+      choices.surface.selected = firstSurface;
+      set('AssetOptionsJson', JSON.stringify(choices));
+    }
+  }
   if (plaza) recalculate();
 };
 export const trigger = (scope: string, action: string, payload?: any) => {
@@ -53,16 +64,17 @@ export const trigger = (scope: string, action: string, payload?: any) => {
     case 'ToggleTool': set('PanelOpen', !get('PanelOpen')); break;
     case 'ClearPolygon': scenario('empty'); break;
     case 'SetPlannerMode': set('PlannerMode', payload); break;
-    case 'SetPathType': set('PathType', payload); set('PathPlanReady', false); break;
-    case 'SetSiteType': set('SiteType', payload); set('PathPlanReady', false); break;
+    case 'SetPathType': set('PathType', payload); set('PathPlanReady', false); set('DecorationPlanReady', false); break;
+    case 'SetSiteType': set('SiteType', payload); set('PathPlanReady', false); set('DecorationPlanReady', false); break;
     case 'SetPlazaCenterPlacement': set('PlazaCenterPlacement', payload); replanPlaza(); break;
     case 'SetPlazaArrangementPlacement': set('PlazaArrangementPlacement', payload); replanPlaza(); break;
     case 'SetPlazaCenterpieceSpacing': set('PlazaCenterpieceSpacing', payload); replanPlaza(); break;
     case 'SetPlazaArrangementSpacing': set('PlazaArrangementSpacing', payload); replanPlaza(); break;
     case 'SetPlazaFenceEnabled': set('PlazaFenceEnabled', payload); replanPlaza(); break;
     case 'SelectPlazaCenter': set('PlazaCenterSelected', payload); replanPlaza(); break;
-    case 'GeneratePaths': if (get('SiteType') === 1) { generatePlaza(); break; } seed++; set('PathPlanReady', true); set('PathBuildSummary', `Mock-Seed ${seed}`); recalculate(); break;
+    case 'GeneratePaths': set('PathBuildStatus', 'ok'); if (get('SiteType') === 1) { generatePlaza(); break; } seed++; set('PathPlanReady', true); set('DecorationPlanReady', true); set('PathBuildSummary', `Mock-Seed ${seed}`); recalculate(); break;
     case 'BuildPaths': set('PathBuildPresent', true); break;
+    case 'BuildPark': void buildEntirePark(); break;
     case 'RemoveBuiltPaths': set('PathBuildPresent', false); set('DecorationBuildPresent', false); set('DecorationPlanReady', false); break;
     case 'GenerateDecorations': seed++; if (get('SiteType') === 1 && get('DecorationPlanReady')) { void rollPlazaVariant(true); break; } set('DecorationPlanReady', true); set('DecorationSummary', `Mock-Seed ${seed}`); recalculate(); break;
     case 'BuildDecorations': set('DecorationBuildPresent', true); break;
@@ -76,6 +88,24 @@ export const trigger = (scope: string, action: string, payload?: any) => {
     default: break;
   }
 };
+async function buildEntirePark() {
+  if (get('PathBuildBusy') || get('DecorationBuildBusy')
+    || !get('PathPlanReady') || !get('DecorationPlanReady') || get('DecorationBuildPresent')) return;
+  if (!get('PathBuildPresent')) {
+    set('PathBuildBusy', true);
+    await new Promise(resolve => setTimeout(resolve, 250));
+    if (get('PathBuildStatus') === 'error') {
+      set('PathBuildBusy', false);
+      return;
+    }
+    set('PathBuildPresent', true);
+    set('DecorationBuildBusy', true);
+    set('PathBuildBusy', false);
+  } else set('DecorationBuildBusy', true);
+  await new Promise(resolve => setTimeout(resolve, 250));
+  set('DecorationBuildPresent', true);
+  set('DecorationBuildBusy', false);
+}
 function editArrangement(command: string) {
   const [action, indexText, value] = command.split('\n');
   const index = Number(indexText);

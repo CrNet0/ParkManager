@@ -10,11 +10,15 @@ type WorkflowFacts = {
   polygonValid: boolean;
   pathsBuilt: boolean;
   decorationsBuilt: boolean;
+  pathsPlanned: boolean;
+  decorationsPlanned: boolean;
 };
 
 /** Derives navigation progress and reachability from the durable workflow facts. */
 export const deriveWorkflowModel = ({ plannerMode, polygonValid,
-  pathsBuilt, decorationsBuilt }: WorkflowFacts): WorkflowModel => ({
-  progressStage: (decorationsBuilt ? 3 : pathsBuilt ? 2 : plannerMode ? 1 : 0) as WorkflowStage,
-  stageAvailability: [!pathsBuilt, polygonValid, pathsBuilt, decorationsBuilt],
+  pathsBuilt, decorationsBuilt, pathsPlanned, decorationsPlanned }: WorkflowFacts): WorkflowModel => ({
+  progressStage: (pathsBuilt || decorationsBuilt ? 3 : plannerMode ? 1 : 0) as WorkflowStage,
+  stageAvailability: [!pathsBuilt, polygonValid && !pathsBuilt,
+    polygonValid && pathsPlanned && !pathsBuilt,
+    pathsBuilt || (polygonValid && pathsPlanned && decorationsPlanned)],
 });

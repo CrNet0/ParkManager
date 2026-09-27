@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useValue } from "cs2/api";
 import {
-  assetOptionsJson$, buildDecorations, buildPaths, clearPolygon,
+  assetOptionsJson$, buildPark, clearPolygon,
   decorationBuildBusy$, decorationBuildPresent$, decorationEnabledMask$,
   decorationPlanReady$, decorationSummary$,
   entranceCount$, finishPark, generateDecorations, generatePaths,
@@ -13,7 +13,7 @@ import {
   plazaCenterpieceSpacing$, plazaFenceEnabled$, selectPlazaCenter,
   setPlazaArrangementPlacement, setPlazaArrangementSpacing,
   setPlazaCenterPlacement, setPlazaCenterpieceSpacing, setPlazaFenceEnabled,
-  polygonArea$, polygonClosed$, polygonValid$, removeBuiltDecorations, removeBuiltPaths,
+  polygonArea$, polygonClosed$, polygonValid$, removeBuiltPaths, status$,
   selectAsset, setPathType, setSiteType, setPlannerMode, siteType$, toggleTool,
   vegetationDensity$,
 } from "./bindings";
@@ -58,6 +58,7 @@ const parsePlazaCenterOptions = (json: string): PlazaCenterOption[] => {
 export const ParkManagerPanel = () => {
   // Hooks stay unconditional: conditional hooks caused React #310 in Cohtml.
   const [activeStage, setActiveStage] = useState(0);
+  const buildMessage = useValue(status$);
   const [failedSurfaceIcons, setFailedSurfaceIcons] = useState<Record<string, boolean>>({});
   const [failedCenterIcons, setFailedCenterIcons] = useState<Record<string, boolean>>({});
   const [assetTooltip, setAssetTooltip] = useState<{
@@ -97,10 +98,14 @@ export const ParkManagerPanel = () => {
   const assetChoices = parseAssetChoices(useValue(assetOptionsJson$));
   const surfaceChoice = assetChoices.surface;
   const visibleSurfaces = surfaceChoice?.options ?? [];
+  const hasSelectedSurface = !!surfaceChoice?.selected
+    && visibleSurfaces.some((option) => option.name === surfaceChoice.selected);
   const fenceChoice = assetChoices.fence;
 
   const busy = pathBuildBusy || decorationBuildBusy;
   const workflow = deriveWorkflowModel({ plannerMode, polygonValid: valid,
+    pathsPlanned: pathPlanReady && hasSelectedSurface,
+    decorationsPlanned: decorationPlanReady,
     pathsBuilt: pathBuildPresent, decorationsBuilt: decorationBuildPresent });
   const outlineState = pointCount === 0 ? t.outlineEmpty
     : !closed ? t.outlineOpen(pointCount)
@@ -207,7 +212,15 @@ export const ParkManagerPanel = () => {
 
   useEffect(() => {
     if (open) setActiveStage(workflow.progressStage);
-  }, [open, workflow.progressStage]);
+  }, [open, workflow.progressStage, siteType]);
+
+  useEffect(() => {
+    if (!valid) setActiveStage(0);
+    else if (!pathBuildPresent && activeStage > 1 && (!pathPlanReady || !hasSelectedSurface))
+      setActiveStage(1);
+    else if (!pathBuildPresent && activeStage === 3 && !decorationPlanReady)
+      setActiveStage(2);
+  }, [valid, pathPlanReady, hasSelectedSurface, decorationPlanReady, pathBuildPresent, activeStage]);
 
   useEffect(() => setAssetTooltip(null), [open, activeStage]);
 
@@ -291,11 +304,16 @@ export const ParkManagerPanel = () => {
   const renderComplete = () => (
       <div className={styles.stageColumn}>
         <div className={styles.stageCopy}>
-          <p>{isPlaza ? t.plazaCompleteText : t.completeText}</p>
+          <p>{decorationBuildPresent
+            ? (isPlaza ? t.plazaCompleteText : t.completeText) : t.finalPreview}</p>
           <div className={styles.stateRow}>
-            <StatePill success>{isPlaza ? t.plazaSurfaceBuilt : t.pathsBuilt}</StatePill>
-            <StatePill success>{t.decorationsBuilt}</StatePill>
+            <StatePill success>{pathBuildPresent
+              ? (isPlaza ? t.plazaSurfaceBuilt : t.pathsBuilt) : t.surfacePlanned}</StatePill>
+            <StatePill success>{decorationBuildPresent ? t.decorationsBuilt : t.furnishingsPlanned}</StatePill>
           </div>
+          {busy ? <p role="status">{t.busy}</p> : null}
+          {buildMessage ? <p role="status">{buildMessage}</p> : null}
+          {pathBuildStatus === "error" ? <p role="alert">{pathBuildSummary}</p> : null}
         </div>
       </div>
   );
@@ -309,12 +327,15 @@ export const ParkManagerPanel = () => {
           <img className={`${styles.buttonIcon} ${styles.backButtonIcon}`}
             src={arrowRightIcon} alt="" />{t.editOutline}</button> : null}
         {activeStage === 2 ? <button className={styles.backButton}
-          disabled={busy} onClick={removeBuiltPaths}>
+          disabled={busy} onClick={() => openStage(1)}>
           <img className={`${styles.buttonIcon} ${styles.backButtonIcon}`}
-            src={arrowRightIcon} alt="" />{t.removeSurface}</button> : null}
+            src={arrowRightIcon} alt="" />
+          {isPlaza ? t.backToStructure : t.backToSurface}</button> : null}
         {activeStage === 3 ? <button className={styles.backButton}
-          disabled={busy} onClick={removeBuiltDecorations}>
-          {t.removeDecorations}</button> : null}
+          disabled={busy || pathBuildPresent} onClick={() => openStage(2)}>
+          <img className={`${styles.buttonIcon} ${styles.backButtonIcon}`}
+            src={arrowRightIcon} alt="" />
+          {isPlaza ? t.backToDetails : t.backToFurnishings}</button> : null}
       </div>
       <div className={styles.footerRight}>
         {activeStage === 0 ? <>
@@ -327,38 +348,42 @@ export const ParkManagerPanel = () => {
         </> : null}
         {activeStage === 1 ? <>
           <button className={styles.secondaryButton}
-            disabled={busy || pathBuildPresent || entranceCount === 0 || !pathPlanReady
-              || (isPlaza && !canPlanPlaza)}
-            onClick={generatePaths}>
-            {isPlaza ? t.plazaRecalculate : t.recalculatePaths}</button>
-          <button className={styles.primaryButton}
             disabled={busy || pathBuildPresent || entranceCount === 0
               || (isPlaza && !canPlanPlaza)}
-            onClick={pathPlanReady ? buildPaths : generatePaths}>
-            {pathBuildBusy ? t.busy : pathPlanReady
-              ? (isPlaza ? t.plazaBuild : t.buildPaths)
-              : (isPlaza ? t.plazaGenerate : t.generatePaths)}
+            onClick={generatePaths}>
+            {pathPlanReady
+              ? (isPlaza ? t.plazaRecalculate : t.recalculatePaths)
+              : t.createVariant}</button>
+          <button className={styles.primaryButton}
+            disabled={busy || pathBuildPresent || !pathPlanReady
+              || !hasSelectedSurface || entranceCount === 0
+              || (isPlaza && !canPlanPlaza)}
+            onClick={() => openStage(2)}>
+            {pathBuildBusy ? t.busy : isPlaza
+              ? t.continuePlazaDetails : t.continueFurnishings}
             <img className={styles.buttonIcon} src={arrowRightIcon} alt="" />
           </button>
         </> : null}
         {activeStage === 2 ? <>
           <button className={styles.secondaryButton}
-            disabled={busy || decorationBuildPresent || !decorationPlanReady}
+            disabled={busy || decorationBuildPresent || !pathPlanReady}
             onClick={generateDecorations}>
-            {t.replanDecorations}</button>
+            {decorationPlanReady ? t.replanDecorations : t.generateDecorations}</button>
           <button className={styles.primaryButton}
-            disabled={busy || decorationBuildPresent}
-            onClick={decorationPlanReady ? buildDecorations : generateDecorations}>
-            {decorationBuildBusy ? t.busy
-              : decorationPlanReady ? t.buildDecorations : t.generateDecorations}
+            disabled={busy || !decorationPlanReady || !pathPlanReady || !hasSelectedSurface}
+            onClick={() => openStage(3)}>
+            {t.continueFinal}
             <img className={styles.buttonIcon} src={arrowRightIcon} alt="" />
           </button>
         </> : null}
         {activeStage === 3 ? <>
-          <button className={styles.dangerButton} disabled={busy}
-            onClick={removeBuiltPaths}>{isPlaza ? t.removePlaza : t.removePark}</button>
+          {pathBuildPresent ? <button className={styles.dangerButton} disabled={busy}
+            onClick={removeBuiltPaths}>{isPlaza ? t.removePlaza : t.removePark}</button> : null}
           <button className={styles.successButton} disabled={busy}
-            onClick={finishPark}>{isPlaza ? t.finishPlaza : t.finishPark}</button>
+            onClick={decorationBuildPresent ? finishPark : buildPark}>
+            {busy ? t.busy : decorationBuildPresent
+              ? (isPlaza ? t.finishPlaza : t.finishPark)
+              : (isPlaza ? t.buildPlaza : t.buildPark)}</button>
         </> : null}
       </div>
     </div>
@@ -379,10 +404,10 @@ export const ParkManagerPanel = () => {
             <div key={label} role="listitem" data-testid="workflow-step"
               className={`${styles.progressStep} ${
                 index === activeStage ? styles.progressStepActive : ""} ${
-                index < workflow.progressStage ? styles.progressStepDone : ""}`}
+                index < activeStage ? styles.progressStepDone : ""}`}
               aria-current={index === activeStage ? "step" : undefined}>
               <span className={styles.progressNumber}>
-                {index < workflow.progressStage ? "✓" : index + 1}
+                {index < activeStage ? "✓" : index + 1}
               </span>
               <span>{label}</span>
             </div>
@@ -396,6 +421,7 @@ export const ParkManagerPanel = () => {
       </div>
 
       <div data-testid="panel-body" data-stage={activeStage}
+        data-paths-built={pathBuildPresent} data-decorations-built={decorationBuildPresent}
         className={`${styles.panelBody} ${
         activeStage <= 1 || activeStage === 3 ? styles.compactBody : ""} ${
         activeStage === 1 && isPlaza ? styles.plazaBody : ""} ${

@@ -346,6 +346,8 @@ namespace ParkManager.Tools
                 case PathBuildPhase.ClearRequested:
                     applyMode = ApplyMode.Clear;
                     _pathBuildPhase = PathBuildPhase.Idle;
+                    PublishPathBuildState("Plaza-Bau wurde verworfen. Planung prüfen und erneut bauen.",
+                        PathBuildStatus.Error);
                     return true;
                 default:
                     return false;

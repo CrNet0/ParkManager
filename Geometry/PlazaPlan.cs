@@ -34,16 +34,6 @@ namespace ParkManager.Geometry
         Bush = 4,
     }
 
-    /// <summary>
-    /// Legacy routing segment. New plazas leave this collection empty and use
-    /// a pedestrian navigation area instead.
-    /// </summary>
-    internal struct PlazaRoutingSegment
-    {
-        internal float2 A;
-        internal float2 B;
-    }
-
     /// <summary>Reserved central fountain/statue position and footprint.</summary>
     internal struct PlazaCenterpiecePlacement
     {
@@ -90,15 +80,13 @@ namespace ParkManager.Geometry
         internal bool HasCenterpiece => Centerpieces.Count > 0;
         internal IReadOnlyList<PlazaCenterpiecePlacement> Centerpieces { get; }
         internal IReadOnlyList<PlazaFurniturePlacement> Furniture { get; }
-        internal IReadOnlyList<PlazaRoutingSegment> RoutingSegments { get; }
 
         internal PlazaPlan(int seed,
             PlazaCenterPlacementMode centerPlacement,
             PlazaArrangementPlacementMode arrangementPlacement,
             float centerpieceSpacing, float arrangementSpacing,
             List<PlazaCenterpiecePlacement> centerpieces,
-            List<PlazaFurniturePlacement> furniture,
-            List<PlazaRoutingSegment> routingSegments)
+            List<PlazaFurniturePlacement> furniture)
         {
             Seed = seed;
             CenterPlacement = centerPlacement;
@@ -107,7 +95,6 @@ namespace ParkManager.Geometry
             ArrangementSpacing = arrangementSpacing;
             Centerpieces = centerpieces ?? new List<PlazaCenterpiecePlacement>();
             Furniture = furniture ?? new List<PlazaFurniturePlacement>();
-            RoutingSegments = routingSegments ?? new List<PlazaRoutingSegment>();
         }
     }
 }

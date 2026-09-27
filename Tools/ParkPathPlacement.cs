@@ -303,8 +303,8 @@ namespace ParkManager.Tools
                 return;
             }
 
-            var removed = DeleteEditableMembers(_lastBuildRecord);
-            EntityManager.AddComponent<Deleted>(_lastBuildRecord);
+            var removed = CountMembers(_lastBuildRecord);
+            RequestBundleDeletion(_lastBuildRecord);
             _lastBuildRecord = Entity.Null;
             DecorationBuildWasRemoved();
             PublishState($"Gebauter Park entfernt ({removed} Teile).");
@@ -408,6 +408,8 @@ namespace ParkManager.Tools
                 case PathBuildPhase.ClearRequested:
                     applyMode = ApplyMode.Clear;
                     _pathBuildPhase = PathBuildPhase.Idle;
+                    PublishPathBuildState("Wegebau wurde verworfen. Planung prüfen und erneut bauen.",
+                        PathBuildStatus.Error);
                     return true;
                 default:
                     return false;
@@ -995,6 +997,11 @@ namespace ParkManager.Tools
             }
             Mod.Log.Info($"ParkManager built {_expectedPathCourses} pedestrian courses and "
                 + $"{_expectedPathAreas} surfaces as {memberCount} top-level editable entities.");
+            if (_buildDecorationsAfterPaths)
+            {
+                _buildDecorationsAfterPaths = false;
+                BuildDecorations();
+            }
         }
 
         private void EnsureMembersAreTopLevel(Entity park)
@@ -1022,22 +1029,23 @@ namespace ParkManager.Tools
 
         private int DeleteEditableMembers(Entity park)
         {
-            if (park == Entity.Null) return 0;
-            var removed = 0;
-            using var entities = _pathMemberQuery.ToEntityArray(Allocator.TempJob);
-            for (var i = 0; i < entities.Length; i++)
-            {
-                var entity = entities[i];
-                if (EntityManager.GetComponentData<ParkPathMember>(entity).Park
-                    != park) continue;
-                EntityManager.AddComponent<Deleted>(entity);
-                removed++;
-            }
-            return removed;
+            var count = CountMembers(park);
+            RequestBundleDeletion(park);
+            return count;
+        }
+
+        private void RequestBundleDeletion(Entity park)
+        {
+            if (park == Entity.Null || !EntityManager.Exists(park)
+                || EntityManager.HasComponent<Deleted>(park)
+                || EntityManager.HasComponent<ParkBundleDeletionRequest>(park)) return;
+            EntityManager.AddComponentData(park, new ParkBundleDeletionRequest());
+            Mod.Log.Info($"ParkManager queued ordered cleanup for {park}.");
         }
 
         private void AbortPathBuild(string reason)
         {
+            _buildDecorationsAfterPaths = false;
             _preflightWarning = null;
             Mod.Log.Warn($"ParkManager path build aborted in {_pathBuildPhase} "
                 + $"(seed {_pathPlan?.Seed ?? 0}, expected {_expectedPathCourses} "
@@ -1052,10 +1060,6 @@ namespace ParkManager.Tools
             LogPermanentPathDiagnostics(_pendingBuildRecord);
             DeleteEditableMembers(_pendingBuildRecord);
             var discardedDefinitions = DiscardBuildDefinitions();
-            if (_pendingBuildRecord != Entity.Null
-                && EntityManager.Exists(_pendingBuildRecord)
-                && !EntityManager.HasComponent<Deleted>(_pendingBuildRecord))
-                EntityManager.AddComponent<Deleted>(_pendingBuildRecord);
             _pendingBuildRecord = Entity.Null;
             _pathEntityBaseline.Clear();
             _areaEntityBaseline.Clear();

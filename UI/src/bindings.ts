@@ -37,15 +37,12 @@ export const decorationBuildPresent$ = bindValue<boolean>(MOD, "DecorationBuildP
 export const decorationSummary$ = bindValue<string>(MOD, "DecorationSummary", "");
 export const locale$ = bindValue<string>(MOD, "Locale", "en");
 export const assetOptionsJson$ = bindValue<string>(MOD, "AssetOptionsJson", "{}");
-export const parkPaletteOptionsJson$ = bindValue<string>(MOD, "ParkPaletteOptionsJson", "[]");
-export const selectedParkPalette$ = bindValue<string>(MOD, "SelectedParkPalette", "");
 export const selectedSnapMask$ = bindValue<number>("tool", "selectedSnapMask", 0);
-export const togglePanel = () => trigger(MOD, "TogglePanel");
 export const toggleTool = () => trigger(MOD, "ToggleTool");
 export const clearPolygon = () => trigger(MOD, "ClearPolygon");
 export const setPlannerMode = (enabled: boolean) => trigger(MOD, "SetPlannerMode", enabled);
 export const generatePaths = () => trigger(MOD, "GeneratePaths");
-export const buildPaths = () => trigger(MOD, "BuildPaths");
+export const buildPark = () => trigger(MOD, "BuildPark");
 export const setPathType = (type: number) => trigger(MOD, "SetPathType", type);
 export const setSiteType = (type: number) => trigger(MOD, "SetSiteType", type);
 export const setPlazaCenterPlacement = (value: number) =>
@@ -70,14 +67,8 @@ export const setFurnitureDensity = (density: number) =>
   trigger(MOD, "SetFurnitureDensity", density);
 export const toggleDecorationCategory = (kind: number) =>
   trigger(MOD, "ToggleDecorationCategory", kind);
-export const buildDecorations = () => trigger(MOD, "BuildDecorations");
-export const removeBuiltDecorations = () => trigger(MOD, "RemoveBuiltDecorations");
 export const finishPark = () => trigger(MOD, "FinishPark");
 export const selectAsset = (category: string, name: string, multi = false) =>
   trigger(MOD, "SelectAsset", `${category}\n${multi ? "multi" : "single"}\n${name}`);
-export const selectParkPalette = (name: string) =>
-  trigger(MOD, "SelectParkPalette", name);
 export const setSelectedSnapMask = (mask: number) =>
   trigger("tool", "setSelectedSnapMask", mask);
-export const setPanelOpen = (open: boolean) =>
-  trigger(MOD, "SetPanelOpen", open);

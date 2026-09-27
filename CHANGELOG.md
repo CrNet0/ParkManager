@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0
+
+- Build the complete park or plaza from the final workflow step; preserve previews during navigation.
+- Use ordered bundle deletion, persist successful completion, support empty furnishing plans, and release the UI after Plaza build failures.
+- Continue preflight checks after advisory warnings and add asset diagnostics for crash investigation.
+- Unify metadata-based asset classification and exclude assets without declared previews.
+- Remove obsolete routing and decoration-surface code, consolidate element IDs, and separate completion state from object presence.
+- Remove unused UI bindings and derive runtime log versions from the assembly.
+- Native crash resolution and in-game beta acceptance remain unverified.
+
 ## 0.5.5 – preview.1
 
 - Add a rule-based Plaza Builder: place one, mirrored, or axis-aligned centerpieces; arrange furniture around the center or boundary; tune clearances; and optionally build without a centerpiece.

@@ -10,7 +10,7 @@ using UnityEngine.Scripting;
 namespace ParkManager.Tools
 {
     /// <summary>
-    /// Starts grouped park deletion only when the completed park's surface is
+    /// Starts grouped park deletion when a built park's surface is
     /// bulldozed. All other members remain independently movable and deletable.
     /// Network edges are marked in Modification2, before Vanilla's
     /// ReferencesSystem runs in Modification2B; doing this later can leave dead
@@ -80,8 +80,6 @@ namespace ParkManager.Tools
                     || member.Park == Entity.Null
                     || !EntityManager.Exists(member.Park)
                     || EntityManager.HasComponent<Deleted>(member.Park)
-                    || !EntityManager.HasComponent<ParkCompletedBundle>(
-                        member.Park)
                     || EntityManager.HasComponent<ParkBundleDeletionRequest>(
                         member.Park)) continue;
                 EntityManager.AddComponentData(member.Park,

@@ -74,8 +74,6 @@ namespace ParkManager.Tools
         private DecorationBuildPhase _decorationBuildPhase;
         private readonly List<PendingDecoration> _pendingDecorations
             = new List<PendingDecoration>();
-        private Entity _pendingSurfacePrefab = Entity.Null;
-        private int _pendingSurfaceElementId;
         private Entity _pendingFencePrefab = Entity.Null;
         private int _expectedFenceCourses;
         private int _pendingFenceElementIdStart;
@@ -83,8 +81,6 @@ namespace ParkManager.Tools
         private int _decorationApplyFrame;
         private int _expectedDecorationMembers;
         private readonly HashSet<Entity> _decorationObjectBaseline =
-            new HashSet<Entity>();
-        private readonly HashSet<Entity> _decorationAreaBaseline =
             new HashSet<Entity>();
         private readonly HashSet<Entity> _decorationFenceBaseline =
             new HashSet<Entity>();
@@ -94,8 +90,11 @@ namespace ParkManager.Tools
         private bool DecorationBuildBusy
             => _decorationBuildPhase != DecorationBuildPhase.Idle;
 
-        private bool HasBuiltDecorations
-            => HasBuiltPaths && CountDecorationMembers(_lastBuildRecord) > 0;
+        private bool IsBuildComplete => HasBuiltPaths
+            && EntityManager.HasComponent<ParkCompletedBundle>(_lastBuildRecord);
+        private bool HasDecorationObjects => HasBuiltPaths
+            && CountDecorationMembers(_lastBuildRecord) > 0;
+        private bool DecorationEditingLocked => IsBuildComplete || HasDecorationObjects;
 
         private void InitializeDecorationPlacement()
         {
@@ -132,9 +131,9 @@ namespace ParkManager.Tools
 
         internal void GenerateDecorations()
         {
-            if (PathBuildBusy || DecorationBuildBusy || HasBuiltDecorations)
+            if (PathBuildBusy || DecorationBuildBusy || DecorationEditingLocked)
             {
-                PublishState(HasBuiltDecorations
+                PublishState(DecorationEditingLocked
                     ? "Zum Neuplanen zuerst die gebaute Ausstattung entfernen."
                     : "Der aktuelle Bau wird noch von CS2 verarbeitet.");
                 return;
@@ -142,8 +141,7 @@ namespace ParkManager.Tools
             if (_selectedSiteKind == ProceduralSiteKind.Plaza
                 && _plazaPlan != null)
             {
-                // The surface step is already built, so only the furnishing
-                // settings are rolled for a new placement.
+                // Keep the structure preview and only reroll the furnishings.
                 if (_decorationPlan != null)
                     RollPlazaFurnishing(NewPlazaVariantSeed());
                 ReplanPlazaArrangement();
@@ -156,7 +154,7 @@ namespace ParkManager.Tools
 
         internal void RefreshDecorationPlan()
         {
-            if (PathBuildBusy || DecorationBuildBusy || HasBuiltDecorations
+            if (PathBuildBusy || DecorationBuildBusy || DecorationEditingLocked
                 || _decorationPlan == null || _pathPlan == null) return;
             GenerateDecorationPlan(_decorationPlan.Seed);
         }
@@ -170,7 +168,7 @@ namespace ParkManager.Tools
             }
             density = math.clamp(density, 25, 200);
             if (_vegetationDensity == density) return;
-            if (HasBuiltDecorations)
+            if (DecorationEditingLocked)
             {
                 PublishState("Zum Ändern der Pflanzendichte zuerst die Ausstattung entfernen.");
                 PublishDecorationState(DecorationPlanSummary(_decorationPlan));
@@ -187,7 +185,7 @@ namespace ParkManager.Tools
             if (PathBuildBusy || DecorationBuildBusy) return;
             density = math.clamp(density, 25, 200);
             if (_furnitureDensity == density) return;
-            if (HasBuiltDecorations)
+            if (DecorationEditingLocked)
             {
                 PublishState("Zum Ändern der Ausstattungsdichte zuerst die Ausstattung entfernen.");
                 return;
@@ -201,7 +199,7 @@ namespace ParkManager.Tools
 
         internal void ToggleDecorationCategory(int kindValue)
         {
-            if (PathBuildBusy || DecorationBuildBusy || HasBuiltDecorations) return;
+            if (PathBuildBusy || DecorationBuildBusy || DecorationEditingLocked) return;
             if (kindValue < (int)ParkDecorationKind.Tree
                 || kindValue > (int)ParkDecorationKind.TrashBin) return;
             var bit = 1 << (kindValue - 1);
@@ -262,7 +260,7 @@ namespace ParkManager.Tools
                 PublishState("Zuerst die geplanten Wege bauen.");
                 return;
             }
-            if (HasBuiltDecorations)
+            if (DecorationEditingLocked)
             {
                 PublishState("Vor dem Neubau zuerst die vorhandene Ausstattung entfernen.");
                 return;
@@ -297,13 +295,11 @@ namespace ParkManager.Tools
                 _buildDefinitions.Clear();
                 var preparationTimer = System.Diagnostics.Stopwatch.StartNew();
                 _pendingDecorations.Clear();
-                _pendingSurfacePrefab = Entity.Null;
-                _pendingSurfaceElementId = 0;
                 _pendingFencePrefab = Entity.Null;
                 _expectedFenceCourses = 0;
                 _pendingFenceElementIdStart = 0;
                 ClearDecorationMaterializationBaselines();
-                var nextElementId = NextElementId(_lastBuildRecord);
+                var nextElementId = NextMemberElementId(_lastBuildRecord);
                 var heightData = _terrainSystem.GetHeightData(waitForPending: true);
 
                 var random = new Unity.Mathematics.Random(
@@ -332,6 +328,10 @@ namespace ParkManager.Tools
                             if (_pendingFencePrefab == Entity.Null)
                             {
                                 _pendingFencePrefab = prefab;
+                                var fenceName = _pathPrefabSystem.TryGetPrefab<PrefabBase>(prefab, out var fenceAsset)
+                                    ? fenceAsset.name : "<unresolved>";
+                                Mod.Log.Info($"ParkManager BUILD-FENCE park={_lastBuildRecord} "
+                                    + $"seed={_decorationPlan.Seed} prefab={prefab} name='{fenceName}'.");
                                 CapturePrefabBaseline(_permanentPathQuery, prefab,
                                     _decorationFenceBaseline);
                             }
@@ -381,11 +381,17 @@ namespace ParkManager.Tools
                 _pendingFenceElementIdStart = nextElementId;
 
                 _expectedDecorationMembers = _pendingDecorations.Count
-                    + (_pendingSurfacePrefab == Entity.Null ? 0 : 1)
                     + _expectedFenceCourses;
                 if (_expectedDecorationMembers == 0)
+                {
+                    if (_decorationPlan.Placements.Count == 0)
+                    {
+                        FinalizeDecorationBuild();
+                        return;
+                    }
                     throw new InvalidOperationException(
                         "Keine der gewählten Vanilla-Assetklassen ist verfügbar.");
+                }
 
                 _decorationStartedFrame = UnityEngine.Time.frameCount;
                 _decorationBuildPhase = DecorationBuildPhase.WaitingForMaterialization;
@@ -412,7 +418,7 @@ namespace ParkManager.Tools
                 PublishState("Entfernen ist erst nach Abschluss des Baues möglich.");
                 return;
             }
-            if (!HasBuiltDecorations)
+            if (!DecorationEditingLocked)
             {
                 PublishState("Es ist keine Parkausstattung gebaut.");
                 return;
@@ -434,17 +440,14 @@ namespace ParkManager.Tools
                     applyMode = ApplyMode.None;
                     var temporaryTimer = System.Diagnostics.Stopwatch.StartNew();
                     var taggedObjects = TagMaterializedObjects();
-                    var taggedSurface = _pendingSurfacePrefab == Entity.Null
-                        || TagMaterializedSurface();
                     var fenceReady = _pendingFencePrefab == Entity.Null
                         || CountOwnTempEdges(_tempPathQuery, _pendingFencePrefab)
                             >= _expectedFenceCourses;
-                    if (taggedObjects >= _pendingDecorations.Count && taggedSurface
+                    if (taggedObjects >= _pendingDecorations.Count
                         && fenceReady)
                     {
                         var taggedFence = TagMaterializedNetworkFence();
                         _expectedDecorationMembers = _pendingDecorations.Count
-                            + (_pendingSurfacePrefab == Entity.Null ? 0 : 1)
                             + taggedFence;
                         applyMode = ApplyMode.Apply;
                         _decorationApplyFrame = UnityEngine.Time.frameCount;
@@ -466,31 +469,25 @@ namespace ParkManager.Tools
                         < GeometrySettleFrames) return true;
                     var permanentTimer = System.Diagnostics.Stopwatch.StartNew();
                     TagPermanentDecorationEntities(out var permanentObjects,
-                        out var permanentSurfaces, out var permanentFenceEdges,
+                        out var permanentFenceEdges,
                         out var permanentFenceNodes);
                     permanentTimer.Stop();
-                    var surfaceReady = _pendingSurfacePrefab == Entity.Null
-                        || permanentSurfaces >= 1;
                     var permanentFenceReady = _pendingFencePrefab == Entity.Null
                         || permanentFenceEdges >= _expectedFenceCourses;
                     if (permanentObjects < _pendingDecorations.Count
-                        || !surfaceReady || !permanentFenceReady)
+                        || !permanentFenceReady)
                     {
                         if (UnityEngine.Time.frameCount - _decorationApplyFrame
                             <= MaterializationTimeoutFrames) return true;
                         AbortDecorationBuild("Die materialisierte Ausstattung blieb "
                             + $"unvollständig: {permanentObjects}/"
                             + $"{_pendingDecorations.Count} Objekte, "
-                            + $"{permanentSurfaces}/"
-                            + $"{(_pendingSurfacePrefab == Entity.Null ? 0 : 1)} Flächen, "
                             + $"{permanentFenceEdges}/{_expectedFenceCourses} Zaunkanten "
                             + $"und {permanentFenceNodes} Zaunknoten.");
                         return true;
                     }
                     Mod.Log.Info("ParkManager rediscovered permanent decoration: "
                         + $"{permanentObjects}/{_pendingDecorations.Count} objects, "
-                        + $"{permanentSurfaces}/"
-                        + $"{(_pendingSurfacePrefab == Entity.Null ? 0 : 1)} surfaces, "
                         + $"{permanentFenceEdges}/{_expectedFenceCourses} fence edges "
                         + $"and {permanentFenceNodes} fence nodes in "
                         + $"{permanentTimer.Elapsed.TotalMilliseconds:F1} ms.");
@@ -836,31 +833,6 @@ namespace ParkManager.Tools
             return true;
         }
 
-        private bool CreateParkSurface(Entity prefab,
-            ref TerrainHeightData heightData)
-        {
-            if (_points.Count < 3) return false;
-            var definition = CreateBuildDefinition();
-            EntityManager.AddComponentData(definition, new CreationDefinition
-            {
-                m_Prefab = prefab,
-            });
-            EntityManager.AddComponent<Updated>(definition);
-            var nodes = EntityManager.AddBuffer<Game.Areas.Node>(definition);
-            nodes.ResizeUninitialized(_points.Count + 1);
-            for (var i = 0; i < _points.Count; i++)
-            {
-                var point = _points[i];
-                var height = TerrainUtils.SampleHeight(ref heightData,
-                    new float3(point.x, 0f, point.y));
-                if (!math.isfinite(height)) return false;
-                nodes[i] = new Game.Areas.Node(
-                    new float3(point.x, height, point.y), float.MinValue);
-            }
-            nodes[_points.Count] = nodes[0];
-            return true;
-        }
-
         private int TagMaterializedObjects()
         {
             BuildDecorationObjectIndex(_tempObjectQuery, null,
@@ -885,26 +857,6 @@ namespace ParkManager.Tools
                 tagged++;
             }
             return tagged;
-        }
-
-        private bool TagMaterializedSurface()
-        {
-            using var areas = _tempAreaQuery.ToEntityArray(Allocator.TempJob);
-            for (var i = 0; i < areas.Length; i++)
-            {
-                var entity = areas[i];
-                if (EntityManager.GetComponentData<PrefabRef>(entity).m_Prefab
-                    != _pendingSurfacePrefab) continue;
-                if (!EntityManager.HasComponent<ParkPathMember>(entity))
-                    EntityManager.AddComponentData(entity, new ParkPathMember
-                    {
-                        Park = _lastBuildRecord,
-                        ElementId = _pendingSurfaceElementId,
-                        Kind = ParkPathMemberKind.ParkSurface,
-                    });
-                return true;
-            }
-            return false;
         }
 
         private int TagMaterializedNetworkFence()
@@ -943,8 +895,13 @@ namespace ParkManager.Tools
         /// </summary>
         private void CaptureDecorationObjectPrefab(Entity prefab)
         {
-            if (prefab != Entity.Null)
-                _capturedDecorationObjectPrefabs.Add(prefab);
+            if (prefab != Entity.Null && _capturedDecorationObjectPrefabs.Add(prefab))
+            {
+                var name = _pathPrefabSystem.TryGetPrefab<PrefabBase>(prefab, out var asset)
+                    ? asset.name : "<unresolved>";
+                Mod.Log.Info($"ParkManager BUILD-ASSET park={_lastBuildRecord} "
+                    + $"seed={_decorationPlan?.Seed} prefab={prefab} name='{name}'.");
+            }
         }
 
         /// <summary>
@@ -974,10 +931,9 @@ namespace ParkManager.Tools
         }
 
         private void TagPermanentDecorationEntities(out int objectCount,
-            out int surfaceCount, out int fenceEdgeCount, out int fenceNodeCount)
+            out int fenceEdgeCount, out int fenceNodeCount)
         {
             objectCount = TagPermanentDecorationObjects();
-            surfaceCount = TagPermanentDecorationSurface();
             TagPermanentDecorationFence(out fenceEdgeCount, out fenceNodeCount);
         }
 
@@ -1118,36 +1074,6 @@ namespace ParkManager.Tools
         private static long DecorationObjectCell(int x, int z)
             => ((long)x << 32) | (uint)z;
 
-        private int TagPermanentDecorationSurface()
-        {
-            if (_pendingSurfacePrefab == Entity.Null) return 0;
-            using var areas = _permanentAreaQuery.ToEntityArray(Allocator.TempJob);
-            for (var i = 0; i < areas.Length; i++)
-            {
-                var entity = areas[i];
-                if (EntityManager.GetComponentData<PrefabRef>(entity).m_Prefab
-                        != _pendingSurfacePrefab
-                    || !IsMaterializedBuildEntity(entity, _lastBuildRecord,
-                        _decorationAreaBaseline)) continue;
-                if (EntityManager.HasComponent<ParkPathMember>(entity))
-                {
-                    var existing = EntityManager.GetComponentData<ParkPathMember>(entity);
-                    if (existing.Park != _lastBuildRecord) continue;
-                    existing.ElementId = _pendingSurfaceElementId;
-                    existing.Kind = ParkPathMemberKind.ParkSurface;
-                    EntityManager.SetComponentData(entity, existing);
-                }
-                else EntityManager.AddComponentData(entity, new ParkPathMember
-                {
-                    Park = _lastBuildRecord,
-                    ElementId = _pendingSurfaceElementId,
-                    Kind = ParkPathMemberKind.ParkSurface,
-                });
-                return 1;
-            }
-            return 0;
-        }
-
         private void TagPermanentDecorationFence(out int edgeCount,
             out int nodeCount)
         {
@@ -1174,13 +1100,13 @@ namespace ParkManager.Tools
         private void ClearDecorationMaterializationBaselines()
         {
             _decorationObjectBaseline.Clear();
-            _decorationAreaBaseline.Clear();
             _decorationFenceBaseline.Clear();
             _capturedDecorationObjectPrefabs.Clear();
         }
 
         private void FinalizeDecorationBuild()
         {
+            Mod.Log.Info($"ParkManager finalizing decoration for {_lastBuildRecord}, seed {_decorationPlan?.Seed}.");
             EnsureMembersAreTopLevel(_lastBuildRecord);
             ApplyPermanentTreeAges();
             LogFurnitureVisibility(_lastBuildRecord);
@@ -1188,7 +1114,6 @@ namespace ParkManager.Tools
             var count = CountDecorationMembers(_lastBuildRecord);
             _buildDefinitions.Clear();
             _pendingDecorations.Clear();
-            _pendingSurfacePrefab = Entity.Null;
             _pendingFencePrefab = Entity.Null;
             _expectedFenceCourses = 0;
             _expectedDecorationMembers = 0;
@@ -1196,6 +1121,11 @@ namespace ParkManager.Tools
             _decorationBuildPhase = DecorationBuildPhase.Idle;
             _preflightWarning = null;
             _buildIssues.Clear();
+            if (!EntityManager.HasComponent<ParkCompletedBundle>(_lastBuildRecord))
+                EntityManager.AddComponentData(_lastBuildRecord, new ParkCompletedBundle
+                {
+                    Version = ParkCompletedBundle.CurrentVersion,
+                });
             PublishState($"Parkfläche und Ausstattung gebaut: {count} frei editierbare Elemente.");
             PublishDecorationState("Gebaut · frei editierbar · "
                 + DecorationPlanSummary(_decorationPlan));
@@ -1310,18 +1240,6 @@ namespace ParkManager.Tools
             EntityManager.SetComponentData(park, state);
         }
 
-        private int NextElementId(Entity park)
-        {
-            var maximum = 0;
-            using var members = _pathMemberQuery.ToEntityArray(Allocator.TempJob);
-            for (var i = 0; i < members.Length; i++)
-            {
-                var member = EntityManager.GetComponentData<ParkPathMember>(members[i]);
-                if (member.Park == park) maximum = Math.Max(maximum, member.ElementId);
-            }
-            return maximum + 1;
-        }
-
         private int CountDecorationMembers(Entity park)
         {
             if (park == Entity.Null) return 0;
@@ -1337,6 +1255,9 @@ namespace ParkManager.Tools
 
         private int DeleteDecorationMembers(Entity park)
         {
+            if (EntityManager.Exists(park)
+                && EntityManager.HasComponent<ParkCompletedBundle>(park))
+                EntityManager.RemoveComponent<ParkCompletedBundle>(park);
             var removed = 0;
             using var members = _pathMemberQuery.ToEntityArray(Allocator.TempJob);
             for (var i = 0; i < members.Length; i++)
@@ -1401,12 +1322,11 @@ namespace ParkManager.Tools
                 + $"expected {_pendingDecorations.Count} objects/"
                 + $"{_expectedFenceCourses} fence courses): {reason}");
             TagPermanentDecorationEntities(out var permanentObjects,
-                out var permanentSurfaces, out var permanentFenceEdges,
+                out var permanentFenceEdges,
                 out var permanentFenceNodes);
             DeleteDecorationMembers(_lastBuildRecord);
             var discardedDefinitions = DiscardBuildDefinitions();
             _pendingDecorations.Clear();
-            _pendingSurfacePrefab = Entity.Null;
             _pendingFencePrefab = Entity.Null;
             _expectedFenceCourses = 0;
             _expectedDecorationMembers = 0;
@@ -1417,7 +1337,6 @@ namespace ParkManager.Tools
             PublishDecorationState("Ausstattungsbau wird verworfen …");
             Mod.Log.Info("ParkManager decoration abort cleanup captured "
                 + $"{permanentObjects} permanent objects, "
-                + $"{permanentSurfaces} permanent surfaces, "
                 + $"{permanentFenceEdges} permanent fence edges and "
                 + $"{permanentFenceNodes} permanent fence nodes; discarded "
                 + $"{discardedDefinitions} definitions.");
@@ -1426,7 +1345,6 @@ namespace ParkManager.Tools
         private void DecorationBuildWasRemoved()
         {
             _pendingDecorations.Clear();
-            _pendingSurfacePrefab = Entity.Null;
             _pendingFencePrefab = Entity.Null;
             _expectedFenceCourses = 0;
             ClearDecorationMaterializationBaselines();
@@ -1441,6 +1359,6 @@ namespace ParkManager.Tools
             => _ui?.SetDecorationState(_vegetationDensity,
                 _furnitureDensity, _decorationEnabledMask,
                 _decorationPlan != null, DecorationBuildBusy,
-                HasBuiltDecorations, summary);
+                IsBuildComplete, summary);
     }
 }

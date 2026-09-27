@@ -469,6 +469,5 @@ static object Describe(PlazaPlan plan) => new {
         y = x.Position.y, x.Radius }).ToArray(),
     furniture = plan.Furniture.Select(x => new { kind = x.Kind.ToString(),
         x = x.Position.x, y = x.Position.y, x.Rotation,
-        x.FootprintRadius, x.ArrangementId }).ToArray(),
-    routes = Array.Empty<object>()
+        x.FootprintRadius, x.ArrangementId }).ToArray()
 };

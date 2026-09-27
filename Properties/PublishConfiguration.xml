@@ -8,7 +8,7 @@ ParkManager lets you draw park and plaza outlines, mark entrances, choose game a
   <Thumbnail Value="Properties/Thumbnail.png" />
   <Tag Value="Code Mod" />
   <ForumLink Value="" />
-  <ModVersion Value="0.5.5" />
+  <ModVersion Value="0.6.0" />
   <GameVersion Value="1.6.*" />
   <Dependency Id="74417" />
   <Dependency Id="79634" />

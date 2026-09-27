@@ -59,7 +59,7 @@ namespace ParkManager.Tools
                         return RejectBuildSite(world, "Terrainhöhe nicht verfügbar", out reason);
                     if (step > 0 && math.abs(world.y - previousHeight)
                         / math.max(0.1f, length / steps) > MaximumPathGrade)
-                        return NoteBuildWarning(world, "Weg stark geneigt", out reason);
+                        NoteBuildWarning(world, "Weg stark geneigt", out reason);
                     previousHeight = world.y;
 
                     var radius = math.max(ObstacleClearance, edge.Width * 0.5f);
@@ -86,7 +86,7 @@ namespace ParkManager.Tools
                         if (NearEntrance(point, GateRoadExemption)
                             && EntityManager.HasComponent<Game.Net.Road>(entity))
                             continue;
-                        return NoteBuildWarning(world, "bestehendes Netz in der Nähe", out reason);
+                        NoteBuildWarning(world, "bestehendes Netz in der Nähe", out reason);
                     }
 
                     seenObjects.Clear();
@@ -119,7 +119,7 @@ namespace ParkManager.Tools
                             size = math.max(size, (float2)EntityManager
                                 .GetComponentData<BuildingData>(prefab).m_LotSize * 4f);
                         if (math.any(math.abs(point - center) > size + radius)) continue;
-                        return NoteBuildWarning(world,
+                        NoteBuildWarning(world,
                             EntityManager.HasComponent<BuildingData>(prefab)
                                 ? "Gebäude in der Nähe" : "Objekt in der Nähe", out reason);
                     }
@@ -131,6 +131,8 @@ namespace ParkManager.Tools
             var hub = FindInteriorHub();
             var hubWorld = new float3(hub.x, 0f, hub.y);
             hubWorld.y = TerrainUtils.SampleHeight(ref terrain, hubWorld);
+            if (!math.isfinite(hubWorld.y))
+                return RejectBuildSite(hubWorld, "Terrainhöhe nicht verfügbar", out reason);
             var min = _points[0];
             var max = _points[0];
             for (var i = 1; i < _points.Count; i++)
@@ -151,11 +153,14 @@ namespace ParkManager.Tools
                     return RejectBuildSite(world, "Terrainhöhe nicht verfügbar", out reason);
                 var east = point + new float2(surfaceStep, 0f);
                 var north = point + new float2(0f, surfaceStep);
-                if (PointInside(east) && SurfaceGrade(point, east, world.y,
-                        ref terrain) > MaximumSurfaceGrade
-                    || PointInside(north) && SurfaceGrade(point, north, world.y,
-                        ref terrain) > MaximumSurfaceGrade)
-                    return NoteBuildWarning(world, "Parkfläche stark geneigt", out reason);
+                var eastGrade = PointInside(east)
+                    ? SurfaceGrade(point, east, world.y, ref terrain) : 0f;
+                var northGrade = PointInside(north)
+                    ? SurfaceGrade(point, north, world.y, ref terrain) : 0f;
+                if (!math.isfinite(eastGrade) || !math.isfinite(northGrade))
+                    return RejectBuildSite(world, "Terrainhöhe nicht verfügbar", out reason);
+                if (eastGrade > MaximumSurfaceGrade || northGrade > MaximumSurfaceGrade)
+                    NoteBuildWarning(world, "Parkfläche stark geneigt", out reason);
             }
             for (var i = 0; i < _points.Count; i++)
             {
@@ -164,10 +169,10 @@ namespace ParkManager.Tools
                 if (distance < 0.1f) continue;
                 var sample = new float3(vertex.x, 0f, vertex.y);
                 sample.y = TerrainUtils.SampleHeight(ref terrain, sample);
-                if (!math.isfinite(sample.y) || !math.isfinite(hubWorld.y)
-                    || math.abs(sample.y - hubWorld.y) / distance
-                       > MaximumSurfaceGrade)
-                    return NoteBuildWarning(sample, "Parkfläche stark geneigt", out reason);
+                if (!math.isfinite(sample.y) || !math.isfinite(hubWorld.y))
+                    return RejectBuildSite(sample, "Terrainhöhe nicht verfügbar", out reason);
+                if (math.abs(sample.y - hubWorld.y) / distance > MaximumSurfaceGrade)
+                    NoteBuildWarning(sample, "Parkfläche stark geneigt", out reason);
             }
             return true;
         }
@@ -193,16 +198,20 @@ namespace ParkManager.Tools
             return false;
         }
 
-        private bool NoteBuildWarning(float3 position, string problem,
+        private void NoteBuildWarning(float3 position, string problem,
             out string reason)
         {
-            _buildIssues.Add(position);
+            if (_buildIssues.Count < 64) _buildIssues.Add(position);
+            if (_preflightWarning != null)
+            {
+                reason = _preflightWarning;
+                return;
+            }
             reason = $"Hinweis: {problem} bei X {position.x:F0}, Z {position.z:F0}. "
                 + "Bau wird trotzdem versucht.";
             _preflightWarning = reason;
             Mod.Log.Info($"ParkManager advisory preflight seed "
                 + $"{_decorationPlan?.Seed ?? _pathPlan.Seed}: {reason}");
-            return true;
         }
 
         private bool ValidateDecorationSite(out string reason)
@@ -246,7 +255,7 @@ namespace ParkManager.Tools
                     var center = EntityManager.GetComponentData<Transform>(entity)
                         .m_Position.xz;
                     if (math.any(math.abs(point - center) > size + radius)) continue;
-                    return NoteBuildWarning(new float3(point.x, 0f, point.y),
+                    NoteBuildWarning(new float3(point.x, 0f, point.y),
                         "vorhandenes Objekt an Ausstattungsposition", out reason);
                 }
             }

@@ -39,7 +39,7 @@ namespace ParkManager.Tools
 
         internal void EditPlazaArrangement(string command)
         {
-            if (PathBuildBusy || DecorationBuildBusy || HasBuiltDecorations
+            if (PathBuildBusy || DecorationBuildBusy || DecorationEditingLocked
                 || string.IsNullOrEmpty(command)) return;
             var parts = command.Split(new[] { '\n' }, 3);
             var action = parts[0];
@@ -79,7 +79,7 @@ namespace ParkManager.Tools
             }
             PublishPlazaArrangement();
             if (_selectedSiteKind == ProceduralSiteKind.Plaza
-                && _plazaPlan != null && !HasBuiltDecorations)
+                && _plazaPlan != null && !DecorationEditingLocked)
                 ReplanPlazaArrangement();
         }
 
@@ -185,7 +185,7 @@ namespace ParkManager.Tools
 
         private bool CanChangePlazaSettings()
             => !HasBuiltPaths && !PathBuildBusy && !DecorationBuildBusy
-                && !HasBuiltDecorations;
+                && !DecorationEditingLocked;
 
         private void ApplyPlazaSettings()
         {

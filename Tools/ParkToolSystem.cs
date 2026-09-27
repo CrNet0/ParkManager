@@ -110,6 +110,7 @@ namespace ParkManager.Tools
         [Preserve]
         protected override void OnStopRunning()
         {
+            _buildDecorationsAfterPaths = false;
             if (PathBuildBusy && _pathBuildPhase != PathBuildPhase.ClearRequested)
                 AbortPathBuild("Werkzeug während des Wegebaus verlassen.");
             if (DecorationBuildBusy

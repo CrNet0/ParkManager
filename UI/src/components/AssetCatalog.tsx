@@ -116,8 +116,7 @@ export const AssetCatalog = ({ t, choices, busy, vegetationDensity,
         </div>
         {choice ? <div className={styles.assetChoiceBody}>
           <div className={styles.assetChoiceGrid} ref={gridRef}>
-            {[{ name: "", icon: "" }, ...choice.options.filter(
-              (option) => !failedIcons[option.icon])].map((option) => {
+            {[{ name: "", icon: "" }, ...choice.options].map((option) => {
               const active = option.name ? (category.multi
                 ? choice.selectedMany.includes(option.name)
                 : choice.selected === option.name) : (category.multi
@@ -127,7 +126,7 @@ export const AssetCatalog = ({ t, choices, busy, vegetationDensity,
                 className={`${styles.assetChoiceTile} ${active ? styles.assetChoiceTileActive : ""}`}
                 disabled={busy} title={label} aria-label={label} aria-pressed={active}
                 onClick={() => selectAsset(category.payload, option.name, category.multi)}>
-                {option.icon ? <img className={styles.assetChoiceIcon} src={option.icon}
+                {option.icon && !failedIcons[option.icon] ? <img className={styles.assetChoiceIcon} src={option.icon}
                     alt="" onError={() => iconFailed(option.icon)} />
                   : <span className={styles.assetChoiceFallback}>✦</span>}
                 <span className={styles.assetChoiceName}>{label}</span>

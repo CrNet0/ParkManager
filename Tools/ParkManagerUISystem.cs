@@ -158,6 +158,8 @@ namespace ParkManager.Tools
             AddBinding(new TriggerBinding(Group, "GeneratePaths",
                 () => World.GetOrCreateSystemManaged<ParkToolSystem>()
                     .GeneratePaths()));
+            AddBinding(new TriggerBinding(Group, "BuildPark",
+                () => World.GetOrCreateSystemManaged<ParkToolSystem>().BuildPark()));
             AddBinding(new TriggerBinding(Group, "BuildPaths",
                 () => World.GetOrCreateSystemManaged<ParkToolSystem>()
                     .BuildPaths()));

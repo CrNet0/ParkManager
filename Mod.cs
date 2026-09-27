@@ -13,13 +13,15 @@ namespace ParkManager
     /// </summary>
     public sealed class Mod : IMod
     {
+        internal static string Version => typeof(Mod).Assembly.GetName().Version.ToString(3);
+
         public static readonly ILog Log = LogManager
             .GetLogger($"{nameof(ParkManager)}.{nameof(Mod)}")
             .SetShowsErrorsInUI(false);
 
         public void OnLoad(UpdateSystem updateSystem)
         {
-            Log.Info("ParkManager 0.5.0 persistent build receipt loaded.");
+            Log.Info($"ParkManager {Version} loaded.");
             updateSystem.UpdateAt<ParkManagerUISystem>(SystemUpdatePhase.UIUpdate);
             updateSystem.UpdateAt<ParkToolSystem>(SystemUpdatePhase.ToolUpdate);
             updateSystem.UpdateAt<ParkAssetCatalogSystem>(SystemUpdatePhase.GameSimulation);
