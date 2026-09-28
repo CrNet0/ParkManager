@@ -67,6 +67,7 @@ namespace ParkManager.Tools
         private EntityQuery _permanentObjectQuery;
         private ParkDecorationPlan _decorationPlan;
         private bool _fenceEnabled;
+        private bool _lakeEnabled = true;
         private int _vegetationDensity = 100;
         private int _furnitureDensity = 100;
         private int _decorationEnabledMask = 0x2f;
@@ -193,6 +194,23 @@ namespace ParkManager.Tools
             else PublishDecorationState(UiText.Of("decoration.furnitureDensityChanged"));
         }
 
+        /// <summary>Plans (and later builds) a lake in the largest open space.</summary>
+        internal void SetLakeEnabled(bool enabled)
+        {
+            if (_lakeEnabled == enabled) return;
+            if (BuildBusy || DecorationEditingLocked)
+            {
+                PublishState(UiText.Of("status.lakeLocked"));
+                _ui?.SetLakeEnabled(_lakeEnabled);
+                return;
+            }
+            _lakeEnabled = enabled;
+            _ui?.SetLakeEnabled(_lakeEnabled);
+            if (_decorationPlan != null && !IsPlaza)
+                GenerateDecorationPlan(_decorationPlan.Seed);
+            PublishState(UiText.Of(enabled ? "status.lakeEnabled" : "status.lakeDisabled"));
+        }
+
         internal void ToggleDecorationCategory(int kindValue)
         {
             if (BuildBusy || DecorationEditingLocked) return;
@@ -231,7 +249,7 @@ namespace ParkManager.Tools
                 _decorationPlan = ParkDecorationPlanner.Generate(_points,
                     _pathPlan, EntrancePoints(), seed, _selectedPathWidth,
                     _fenceEnabled, _vegetationDensity, _furnitureDensity,
-                    _decorationEnabledMask);
+                    _decorationEnabledMask, planLake: _lakeEnabled, planAnimals: true);
                 FitFurnitureToSelectedAssets();
             }
             var summary = DecorationPlanSummary(_decorationPlan);
@@ -494,6 +512,8 @@ namespace ParkManager.Tools
                 case ParkDecorationKind.PlazaCenter:
                     category = ParkAssetCategory.PlazaCenter;
                     break;
+                case ParkDecorationKind.AnimalSpawner:
+                    return TryResolveAnimalSpawner(out prefab);
                 default:
                     prefab = Entity.Null;
                     return false;
@@ -518,6 +538,31 @@ namespace ParkManager.Tools
                     out _)) return true;
             Mod.Log.Warn($"ParkManager has no usable {category} prefab; layer skipped.");
             return false;
+        }
+
+        private const string AnimalSpawnerPrefabName = "Forest Animal Spawner";
+        private Entity _animalSpawnerPrefab = Entity.Null;
+
+        /// <summary>
+        /// Resolves the Vanilla forest animal spawner marker. It is a
+        /// placeholder prefab that must be placed as-is; the game's creature
+        /// spawner system picks the animals.
+        /// </summary>
+        private bool TryResolveAnimalSpawner(out Entity prefab)
+        {
+            if (_animalSpawnerPrefab == Entity.Null
+                || !EntityManager.Exists(_animalSpawnerPrefab))
+            {
+                _animalSpawnerPrefab = Entity.Null;
+                if (_pathPrefabSystem.TryGetPrefab(new PrefabID(
+                        nameof(MarkerObjectPrefab), AnimalSpawnerPrefabName),
+                        out var spawner) && spawner != null)
+                    _animalSpawnerPrefab = _pathPrefabSystem.GetEntity(spawner);
+                else Mod.Log.Warn($"ParkManager found no '{AnimalSpawnerPrefabName}'; "
+                    + "animal spawners are skipped.");
+            }
+            prefab = _animalSpawnerPrefab;
+            return prefab != Entity.Null;
         }
 
         private static bool IsPlazaColorFurniture(ParkDecorationKind kind)
@@ -1041,6 +1086,7 @@ namespace ParkManager.Tools
             PublishDecorationState(UiText.Of("decoration.built",
                 DecorationPlanSummary(_decorationPlan)));
             Mod.Log.Info($"ParkManager built {count} top-level decoration entities.");
+            StartLakeBuild();
         }
 
         private void LogFurnitureVisibility(Entity park)
@@ -1162,7 +1208,8 @@ namespace ParkManager.Tools
 
         private static bool IsDecorationKind(ParkPathMemberKind kind)
             => kind >= ParkPathMemberKind.Tree
-                && kind <= ParkPathMemberKind.PlazaCenter;
+                    && kind <= ParkPathMemberKind.PlazaCenter
+                || kind == ParkPathMemberKind.AnimalSpawner;
 
         private static ParkPathMemberKind ToMemberKind(ParkDecorationKind kind)
         {
@@ -1175,6 +1222,7 @@ namespace ParkManager.Tools
                 case ParkDecorationKind.Fence: return ParkPathMemberKind.Fence;
                 case ParkDecorationKind.TrashBin: return ParkPathMemberKind.TrashBin;
                 case ParkDecorationKind.PlazaCenter: return ParkPathMemberKind.PlazaCenter;
+                case ParkDecorationKind.AnimalSpawner: return ParkPathMemberKind.AnimalSpawner;
                 default: return ParkPathMemberKind.Bush;
             }
         }
@@ -1242,7 +1290,7 @@ namespace ParkManager.Tools
         private void PublishDecorationState(string summary)
             => _ui?.SetDecorationState(_vegetationDensity,
                 _furnitureDensity, _decorationEnabledMask,
-                _decorationPlan != null, DecorationBuildBusy,
+                _decorationPlan != null, DecorationBuildBusy || LakeBuildBusy,
                 IsBuildComplete, summary);
     }
 }

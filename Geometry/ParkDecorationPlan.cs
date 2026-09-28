@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Unity.Mathematics;
 
@@ -13,6 +14,8 @@ namespace ParkManager.Geometry
         Fence = 5,
         TrashBin = 6,
         PlazaCenter = 7,
+        /// <summary>Invisible marker that lets the game spawn forest animals.</summary>
+        AnimalSpawner = 8,
     }
 
     /// <summary>
@@ -42,12 +45,17 @@ namespace ParkManager.Geometry
         public bool FenceEnabled { get; }
         public List<ParkDecorationPlacement> Placements { get; }
 
+        /// <summary>Planned lake outline in the XZ plane; empty without a lake.</summary>
+        public IReadOnlyList<float2> Lake { get; }
+
         public ParkDecorationPlan(int seed, bool fenceEnabled,
-            List<ParkDecorationPlacement> placements)
+            List<ParkDecorationPlacement> placements,
+            IReadOnlyList<float2> lake = null)
         {
             Seed = seed;
             FenceEnabled = fenceEnabled;
             Placements = placements ?? new List<ParkDecorationPlacement>();
+            Lake = lake ?? Array.Empty<float2>();
         }
 
         public int Count(ParkDecorationKind kind)

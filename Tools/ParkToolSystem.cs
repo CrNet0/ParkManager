@@ -61,7 +61,7 @@ namespace ParkManager.Tools
         private bool IsPlaza => _selectedSiteKind == ProceduralSiteKind.Plaza;
 
         /// <summary>A running path or furnishing build blocks all edits.</summary>
-        private bool BuildBusy => PathBuildBusy || DecorationBuildBusy;
+        private bool BuildBusy => PathBuildBusy || DecorationBuildBusy || LakeBuildBusy;
 
         /// <summary>Outline and entrances are fixed while a build exists or runs.</summary>
         private bool OutlineLocked => HasBuiltPaths || BuildBusy;
@@ -120,6 +120,7 @@ namespace ParkManager.Tools
             if (DecorationBuildBusy
                 && _decorationBuildPhase != DecorationBuildPhase.ClearRequested)
                 AbortDecorationBuild(UiText.Of("decoration.toolLeft"));
+            AbortLakeBuild();
             _ui?.SetToolActive(false);
             base.OnStopRunning();
         }
@@ -139,6 +140,7 @@ namespace ParkManager.Tools
             var deps = base.OnUpdate(inputDeps);
             if (m_ToolSystem.activeTool != this) return deps;
             MonitorExternalPathEdits();
+            if (ProcessLakeBuild()) return Render(deps);
             if (ProcessDecorationPlacement()) return Render(deps);
             if (ProcessPathPlacement()) return Render(deps);
 

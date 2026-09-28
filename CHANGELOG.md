@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Park lakes (experimental): parks find their largest open space between the paths and outline an organic lake with an 8 m shore strip; the overlay shows it in blue and planting keeps clear of it. After the park is built, the game's level brushes excavate the basin 5 m below the lowest shore point and a constant-level water source fills it 1 m below the shore. The water source is removed with the park; the basin is not yet refilled. A lake-bed surface follows. A "Lake: Off / On" switch in the surface step (default on) plans parks with or without a lake; it is locked once the furnishings are built.
+- Forest animal spawners: larger parks place the vanilla "Forest Animal Spawner" in their largest groves (one per 20,000 m², at most eight).
+
 - Localize status, path and furnishing messages from the game systems: C# now publishes message keys (`Tools/UiText.cs`), and the UI translates them in `i18n.ts`, so English players no longer see German build notices.
 - Move the plaza centerpiece choice into its own `PlazaCenterSelector` component.
 - Keep large parks fully planted: tree, bush, furniture, bin and fence caps are now safety limits far above normal needs (previously 180 trees and 300 bushes regardless of size), and parks above ~70,000 m² get more groves. Vegetation neighbour checks use a spatial grid. Parks below the old limits plan exactly as before.

@@ -13,12 +13,40 @@ type BatchCase = { index: number; seed: number; width: number; height: number;
     } };
 type BatchReport = { count: number; failed: number; cases: BatchCase[] };
 type LivePlan = { seed: number; error?: string;
-  paths: { ax: number; ay: number; bx: number; by: number; hidden: boolean }[];
+  paths: { ax: number; ay: number; bx: number; by: number; hidden: boolean;
+    width?: number }[];
   fences: { ax: number; ay: number; bx: number; by: number }[];
+  lake?: { x: number; y: number }[];
   centers: { x: number; y: number; radius: number }[];
   furniture: { x: number; y: number; radius: number; kind: string; asset: string;
     species?: number; age?: number }[] };
-const speciesColors = ['#68cb74', '#2f8f4e', '#a3d65c', '#4fb3a0'];
+// Crowns per simulated species; bushes use a lighter tone of the same species.
+// Colors are set as inline styles: the stylesheet's `.map circle` and
+// `.map polygon` rules would otherwise override SVG fill attributes.
+const treeColors = ['#226e34', '#468228', '#145a50', '#64781e'];
+const bushColors = ['#5ab45a', '#7ec85c', '#4ea078', '#9cb65a'];
+const plantColor = (item: { kind: string; species?: number }) =>
+  (item.kind === 'Tree' ? treeColors : bushColors)[item.species ?? 0];
+type MapPoint = { x: number; y: number };
+/** Closest point on the closed outline, as the in-game entrance tool does. */
+const snapToOutline = (point: MapPoint, outline: MapPoint[]): MapPoint => {
+  let best = point;
+  let bestDistance = Infinity;
+  outline.forEach((a, i) => {
+    const b = outline[(i + 1) % outline.length];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const length = dx * dx + dy * dy;
+    const t = length < 1e-6 ? 0 : Math.max(0, Math.min(1,
+      ((point.x - a.x) * dx + (point.y - a.y) * dy) / length));
+    const candidate = { x: a.x + dx * t, y: a.y + dy * t };
+    const distance = (candidate.x - point.x) ** 2 + (candidate.y - point.y) ** 2;
+    if (distance < bestDistance) { bestDistance = distance; best = candidate; }
+  });
+  return best;
+};
+// Bushes first so tree crowns cover the understory.
+const drawOrder = (kind: string) => kind === 'Bush' ? 0 : kind === 'Tree' ? 1 : 2;
 
 const icon = (letter: string, color: string) => `data:image/svg+xml,${encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="8" fill="${color}"/><text x="32" y="43" text-anchor="middle" fill="white" font-size="33" font-family="Arial">${letter}</text></svg>`)}`;
@@ -88,7 +116,8 @@ function App() {
             arrangement: JSON.parse(get<string>('PlazaArrangementJson') || '[]'),
             vegetationDensity: get('VegetationDensity'),
             furnitureDensity: get('FurnitureDensity'),
-            enabledMask: get('DecorationEnabledMask') }) });
+            enabledMask: get('DecorationEnabledMask'),
+            lakeEnabled: get('LakeEnabled') !== false }) });
         const result = await response.json() as LivePlan;
         if (request !== latestPlanRequest) return;
         if (!response.ok || result.error) throw new Error(result.error || `HTTP ${response.status}`);
@@ -114,7 +143,10 @@ function App() {
     const point = { x: (event.clientX - rect.left) / rect.width * 900,
       y: (event.clientY - rect.top) / rect.height * 600 };
     if (plannerMode && polygonValid) {
-      const next = [...entrances, point]; setEntrances(next);
+      // Like the game, an entrance sits exactly on the nearest outline edge;
+      // an off-edge gate would leave the path planner without a start point.
+      const next = [...entrances, snapToOutline(point, previewPoints)];
+      setEntrances(next);
       setLivePlan(null); set('PathPlanReady', false); set('DecorationPlanReady', false);
       set('EntranceCount', next.length); return;
     }
@@ -169,42 +201,55 @@ function App() {
       <svg viewBox="0 0 900 600" preserveAspectRatio="none" onClick={onMapClick}>
         {current ? <>
           <polygon points={`${mapX(0)},${mapY(0)} ${mapX(current.width)},${mapY(0)} ${mapX(current.width)},${mapY(current.height)} ${mapX(0)},${mapY(current.height)}`} />
-          {current.plan.centers.map((center, i) => <circle key={i} cx={mapX(center.x)} cy={mapY(center.y)} r={center.Radius * Math.min(scaleX, scaleY)} fill="#479ec0" stroke="white" strokeWidth="2" />)}
-          {current.plan.furniture.map((item, i) => <circle key={i} cx={mapX(item.x)} cy={mapY(item.y)} r={Math.max(4, item.FootprintRadius * Math.min(scaleX, scaleY))} fill={item.kind === 'Bench' ? '#ad7c4b' : item.kind === 'Tree' ? '#43a761' : '#e7c452'}><title>{item.kind}</title></circle>)}
+          {current.plan.centers.map((center, i) => <circle key={i} cx={mapX(center.x)} cy={mapY(center.y)} r={center.Radius * Math.min(scaleX, scaleY)} style={{ fill: "#479ec0", stroke: "white", strokeWidth: 2 }} />)}
+          {current.plan.furniture.map((item, i) => <circle key={i} cx={mapX(item.x)} cy={mapY(item.y)} r={Math.max(4, item.FootprintRadius * Math.min(scaleX, scaleY))} style={{ fill: item.kind === 'Bench' ? '#ad7c4b' : item.kind === 'Tree' ? '#43a761' : '#e7c452' }}><title>{item.kind}</title></circle>)}
         </> : previewPoints.length > 0 ? <>
-          <polygon points={previewPoints.map((p) => `${p.x},${p.y}`).join(' ')} />
+          <polygon points={previewPoints.map((p) => `${p.x},${p.y}`).join(' ')}
+            style={livePlan && pathPlanReady && get('SiteType') !== 1
+              ? { fill: '#78a05a', stroke: '#e6e6c8' } : undefined} />
+          {livePlan && decorationPlanReady && livePlan.lake && livePlan.lake.length > 2
+            ? <polygon data-testid="live-lake"
+                style={{ fill: '#3f8ee0', stroke: '#1a55b8', strokeWidth: 3 }}
+                points={livePlan.lake.map((p) => `${p.x * 8},${p.y * 8}`).join(' ')} />
+            : null}
           {livePlan && pathPlanReady ? livePlan.paths.map((path, i) =>
             <line key={`path-${i}`} x1={path.ax * 8} y1={path.ay * 8}
-              x2={path.bx * 8} y2={path.by * 8} stroke={path.hidden ? '#9ac7cf' : '#edce66'}
-              strokeWidth={path.hidden ? '2' : '4'}
+              x2={path.bx * 8} y2={path.by * 8} stroke={path.hidden ? '#9ac7cf' : '#d7c8a0'}
+              strokeWidth={path.hidden ? 2 : (path.width ?? 0.5) * 8}
+              strokeLinecap="round"
               strokeDasharray={path.hidden ? '5 4' : undefined} />) : null}
           {livePlan && pathPlanReady ? livePlan.centers.map((center, i) =>
             <circle key={`center-${i}`} data-testid="live-centerpiece"
               cx={center.x * 8} cy={center.y * 8}
-              r={center.radius * 8} fill="#58bed4" stroke="white" strokeWidth="1" />) : null}
+              r={center.radius * 8} style={{ fill: "#58bed4", stroke: "white", strokeWidth: 1 }} />) : null}
           {livePlan && pathPlanReady ? livePlan.fences.map((fence, i) =>
             <line key={`fence-${i}`} data-testid="live-plaza-fence"
               x1={fence.ax * 8} y1={fence.ay * 8}
               x2={fence.bx * 8} y2={fence.by * 8} stroke="#d2d6bd"
               strokeWidth="3" />) : null}
-          {livePlan && decorationPlanReady ? livePlan.furniture.map((item, i) =>
+          {livePlan && decorationPlanReady ? [...livePlan.furniture]
+            .sort((a, b) => drawOrder(a.kind) - drawOrder(b.kind)).map((item, i) =>
             <circle key={`furniture-${i}`} data-testid="live-furniture"
               cx={item.x * 8} cy={item.y * 8}
-              r={Math.max(2, item.radius * 8)} fill={item.kind === 'Bench' ? '#bd8758'
-                : item.kind === 'Tree' || item.kind === 'Bush'
-                  ? speciesColors[item.species ?? 0] : '#efd56c'}>
+              r={Math.max(2, item.radius * 8)}
+              style={item.kind === 'Tree' || item.kind === 'Bush'
+                ? { fill: plantColor(item), stroke: item.kind === 'Tree'
+                    ? 'rgba(0, 0, 0, 0.35)' : 'none', strokeWidth: 1 }
+                : item.kind === 'AnimalSpawner'
+                  ? { fill: 'none', stroke: '#f2732a', strokeWidth: 3 }
+                  : { fill: item.kind === 'Bench' ? '#bd8758' : '#efd56c' }}>
               <title>{item.kind} {item.asset}{item.kind === 'Tree'
                 ? ` Art ${(item.species ?? 0) + 1} Alter ${item.age}` : ''}</title></circle>) : null}
           {points.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={i === 0 ? '9' : '5'}
-            fill={i === 0 ? '#80e69a' : '#f4cb62'} />)}
+            style={{ fill: i === 0 ? '#80e69a' : '#f4cb62' }} />)}
           {entrances.map((p, i) => <circle key={`gate-${i}`} cx={p.x} cy={p.y}
-            r="8" fill="#5cc9fa" stroke="white" strokeWidth="2" />)}
+            r="8" style={{ fill: "#5cc9fa", stroke: "white", strokeWidth: 2 }} />)}
         </> : null}
       </svg>
       {livePlan && !report ? <div className="report" data-testid="live-plan-summary"><strong>Live-Layout · {get('SiteType') === 1
         ? `Plaza-Regeln · Seed ${livePlan.seed}` : `Seed ${livePlan.seed}`}</strong>
         <div>{livePlan.paths.length} Routen · {livePlan.centers.length} Zentren · {livePlan.furniture.length} Assets · {livePlan.fences.length} Zaunläufe</div>
-        <small>Berechnet mit den Produktions-Planern. Asset-Radien im Mock sind Beispielwerte.</small>
+        <small>Berechnet mit den Produktions-Planern. Pflanzen in Planergröße, Möbel schematisch.</small>
       </div> : null}
       {report ? <div className="report"><strong>{report.count} Varianten · {report.failed} mit Befund</strong><br />
         <button onClick={() => setSelected(Math.max(0, selected - 1))}>◀</button>

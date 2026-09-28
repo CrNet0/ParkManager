@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Unity.Mathematics;
 
 namespace ParkManager.Geometry
@@ -21,6 +22,8 @@ namespace ParkManager.Geometry
         private const int MaximumTrashBins = 250;
         private const int MaximumFencePieces = 2000;
         private const int MaximumGroves = 120;
+        private const double AreaPerAnimalSpawner = 20000.0;
+        private const int MaximumAnimalSpawners = 8;
         // Share of the park area covered by groves; the rest stays open lawn.
         private const float GroveCoverage = 0.28f;
         private const float FenceInset = 0.20f;
@@ -32,7 +35,8 @@ namespace ParkManager.Geometry
         internal static ParkDecorationPlan Generate(IReadOnlyList<float2> polygon,
             ParkPathPlan paths, IReadOnlyList<float2> entrances, int seed,
             float builtPathWidth, bool fenceEnabled, int vegetationDensity,
-            int furnitureDensity, int enabledMask)
+            int furnitureDensity, int enabledMask, bool planLake = false,
+            bool planAnimals = false)
         {
             var result = new List<ParkDecorationPlacement>();
             if (polygon == null || polygon.Count < 3)
@@ -40,15 +44,22 @@ namespace ParkManager.Geometry
 
             var area = Math.Abs(PolygonMath.SignedArea(polygon));
             PolygonMath.Bounds(polygon, out var min, out var max);
+            var layoutSeed = Seeds.Mix(seed, 0x3c6ef372u);
+            // The lake takes the largest open space between the paths; plants
+            // are counted for the remaining land only.
+            var lake = planLake
+                ? ParkLakePlanner.Generate(polygon, paths, entrances, builtPathWidth,
+                    Seeds.Mix(seed, 0x2545f491u))
+                : new List<float2>();
+            var plantedArea = area - Math.Abs(PolygonMath.SignedArea(lake));
 
             var densityScale = math.clamp(vegetationDensity, 25, 200) / 100.0;
             var furnitureScale = math.clamp(furnitureDensity, 25, 200) / 100f;
-            var trees = math.clamp((int)Math.Round(area / 380.0 * densityScale),
+            var trees = math.clamp((int)Math.Round(plantedArea / 380.0 * densityScale),
                 1, MaximumTrees);
-            var bushes = math.clamp((int)Math.Round(area / 230.0 * densityScale),
+            var bushes = math.clamp((int)Math.Round(plantedArea / 230.0 * densityScale),
                 1, MaximumBushes);
-            var layoutSeed = Seeds.Mix(seed, 0x3c6ef372u);
-            var groves = BuildGroves(polygon, min, max, area, layoutSeed);
+            var groves = BuildGroves(polygon, lake, min, max, area, layoutSeed);
             var belt = new BoundaryBelt(polygon, area, layoutSeed);
             // Furniture is planned first so both vegetation layers can reserve
             // its footprint. The random streams are independent, therefore the
@@ -65,27 +76,67 @@ namespace ParkManager.Geometry
                 SampleTrashBins(result, polygon, paths, entrances, builtPathWidth,
                     furnitureScale, Seeds.Mix(seed, 0xa54ff53au));
             if (IsEnabled(enabledMask, ParkDecorationKind.Tree))
-                SampleVegetation(result, polygon, paths, entrances, min, max,
+                SampleVegetation(result, polygon, paths, entrances, lake, min, max,
                     groves, belt, trees, ParkDecorationKind.Tree,
                     builtPathWidth, Seeds.Mix(seed, 0x51f15e21u));
             if (IsEnabled(enabledMask, ParkDecorationKind.Bush))
-                SampleVegetation(result, polygon, paths, entrances, min, max,
+                SampleVegetation(result, polygon, paths, entrances, lake, min, max,
                     groves, belt, bushes, ParkDecorationKind.Bush,
                     builtPathWidth, Seeds.Mix(seed, 0x9e3779b9u));
             if (fenceEnabled && IsEnabled(enabledMask, ParkDecorationKind.Fence))
                 SampleFence(result, polygon, entrances, builtPathWidth,
                     Seeds.Mix(seed, 0xd1b54a35u));
-            return new ParkDecorationPlan(seed, fenceEnabled, result);
+            if (planAnimals)
+                PlaceAnimalSpawners(result, polygon, paths, lake, groves, area,
+                    builtPathWidth);
+            return new ParkDecorationPlan(seed, fenceEnabled, result, lake);
         }
 
         private static bool IsEnabled(int mask, ParkDecorationKind kind)
             => (mask & (1 << ((int)kind - 1))) != 0;
 
+        /// <summary>
+        /// Puts animal spawners into the largest groves, where wildlife reads
+        /// as living in the wood rather than on the lawn: one per
+        /// <see cref="AreaPerAnimalSpawner"/>, at most
+        /// <see cref="MaximumAnimalSpawners"/>. Small parks get none.
+        /// </summary>
+        private static void PlaceAnimalSpawners(List<ParkDecorationPlacement> result,
+            IReadOnlyList<float2> polygon, ParkPathPlan paths,
+            IReadOnlyList<float2> lake, IReadOnlyList<Grove> groves, double area,
+            float builtPathWidth)
+        {
+            var target = math.min(MaximumAnimalSpawners,
+                (int)Math.Round(area / AreaPerAnimalSpawner));
+            var placed = 0;
+            foreach (var grove in groves.OrderByDescending(grove => grove.Area))
+            {
+                if (placed >= target) break;
+                if (!PolygonMath.PointInside(grove.Center, polygon)
+                    || InLake(grove.Center, lake, 4f)
+                    || !HasPathClearance(grove.Center, 4f, paths, builtPathWidth))
+                    continue;
+                result.Add(new ParkDecorationPlacement
+                {
+                    Kind = ParkDecorationKind.AnimalSpawner,
+                    Position = grove.Center,
+                    Size = 2f,
+                });
+                placed++;
+            }
+        }
+
+        /// <summary>True when a plant of <paramref name="radius"/> would touch the water.</summary>
+        private static bool InLake(float2 point, IReadOnlyList<float2> lake, float radius)
+            => lake.Count >= 3 && (PolygonMath.PointInside(point, lake)
+                || PolygonMath.DistanceToBoundarySquared(point, lake) < radius * radius);
+
         private static void SampleVegetation(List<ParkDecorationPlacement> result,
             IReadOnlyList<float2> polygon, ParkPathPlan paths,
-            IReadOnlyList<float2> entrances, float2 min, float2 max,
-            IReadOnlyList<Grove> groves, BoundaryBelt belt, int target,
-            ParkDecorationKind kind, float builtPathWidth, uint seed)
+            IReadOnlyList<float2> entrances, IReadOnlyList<float2> lake,
+            float2 min, float2 max, IReadOnlyList<Grove> groves,
+            BoundaryBelt belt, int target, ParkDecorationKind kind,
+            float builtPathWidth, uint seed)
         {
             var random = new Unity.Mathematics.Random(seed == 0 ? 1u : seed);
             // Large parks carry thousands of plants; a spatial grid keeps the
@@ -172,6 +223,7 @@ namespace ParkManager.Geometry
                     || PolygonMath.DistanceToBoundarySquared(point, polygon)
                         < boundaryClearance * boundaryClearance
                     || PolygonMath.DistanceToPointsSquared(point, entrances) < 100f
+                    || InLake(point, lake, collisionRadius)
                     || TooCloseToPlaced(result, grid, nearby, point, kind,
                         spacing, collisionRadius)
                     || !HasPathClearance(point, collisionRadius, paths,
@@ -307,7 +359,8 @@ namespace ParkManager.Geometry
         /// large ones rare, which reads as grown rather than laid out.
         /// </summary>
         private static List<Grove> BuildGroves(IReadOnlyList<float2> polygon,
-            float2 min, float2 max, double area, uint seed)
+            IReadOnlyList<float2> lake, float2 min, float2 max, double area,
+            uint seed)
         {
             var result = new List<Grove>();
             var random = new Unity.Mathematics.Random(seed == 0 ? 1u : seed);
@@ -333,7 +386,8 @@ namespace ParkManager.Geometry
                     Spacing = random.NextFloat(0.85f, 1.35f),
                     Center = random.NextFloat2(min, max),
                 };
-                if (!PolygonMath.PointInside(grove.Center, polygon)) continue;
+                if (!PolygonMath.PointInside(grove.Center, polygon)
+                    || InLake(grove.Center, lake, grove.Radius * 0.5f)) continue;
                 var valid = true;
                 for (var i = 0; i < result.Count && valid; i++)
                 {

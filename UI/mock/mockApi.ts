@@ -64,6 +64,7 @@ export const trigger = (scope: string, action: string, payload?: any) => {
     case 'ClearPolygon': scenario('empty'); break;
     case 'SetPlannerMode': set('PlannerMode', payload); break;
     case 'SetPathType': set('PathType', payload); set('PathPlanReady', false); set('DecorationPlanReady', false); break;
+    case 'SetLakeEnabled': set('LakeEnabled', payload); recalculate(); break;
     case 'SetSiteType': set('SiteType', payload); set('PathPlanReady', false); set('DecorationPlanReady', false); break;
     case 'SetPlazaCenterPlacement': set('PlazaCenterPlacement', payload); replanPlaza(); break;
     case 'SetPlazaArrangementPlacement': set('PlazaArrangementPlacement', payload); replanPlaza(); break;

@@ -656,3 +656,20 @@ test('Plaza detail header has no extra height while panes and density stay align
   expect(Math.abs(plazaSlots.width - plazaPicker.width)).toBeLessThan(2);
   expect(Math.abs(parkDensity!.height - plazaDensity.height)).toBeLessThan(2);
 });
+
+test('park lake toggle switches the planned lake and is hidden for plazas', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'paths', exact: true }).click();
+  const lake = page.getByTestId('lake-selector');
+  await expect(lake).toBeVisible();
+  const on = lake.getByRole('button', { name: 'An', exact: true });
+  const off = lake.getByRole('button', { name: 'Aus', exact: true });
+  await expect(on).toHaveAttribute('aria-pressed', 'true');
+  await off.click();
+  await expect(off).toHaveAttribute('aria-pressed', 'true');
+  await expect(on).toHaveAttribute('aria-pressed', 'false');
+  await on.click();
+  await expect(on).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'plaza', exact: true }).click();
+  await expect(page.getByTestId('lake-selector')).toHaveCount(0);
+});

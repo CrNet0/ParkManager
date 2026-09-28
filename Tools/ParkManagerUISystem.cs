@@ -38,6 +38,7 @@ namespace ParkManager.Tools
         private ValueBinding<string> _pathBuildSummary;
         private ValueBinding<string> _pathBuildStatus;
         private ValueBinding<int> _pathType;
+        private ValueBinding<bool> _lakeEnabled;
         private ValueBinding<int> _siteType;
         private ValueBinding<int> _plazaCenterPlacement;
         private ValueBinding<int> _plazaArrangementPlacement;
@@ -99,6 +100,8 @@ namespace ParkManager.Tools
                 Group, "PathBuildStatus", "ok"));
             AddBinding(_pathType = new ValueBinding<int>(
                 Group, "PathType", (int)ParkPathType.Wide));
+            AddBinding(_lakeEnabled = new ValueBinding<bool>(
+                Group, "LakeEnabled", true));
             AddBinding(_siteType = new ValueBinding<int>(
                 Group, "SiteType", (int)ProceduralSiteKind.Park));
             AddBinding(_plazaCenterPlacement = new ValueBinding<int>(
@@ -149,6 +152,8 @@ namespace ParkManager.Tools
                 () => Tool.BuildPark()));
             AddBinding(new TriggerBinding<int>(Group, "SetPathType",
                 value => Tool.SetPathType(value)));
+            AddBinding(new TriggerBinding<bool>(Group, "SetLakeEnabled",
+                value => Tool.SetLakeEnabled(value)));
             AddBinding(new TriggerBinding<int>(Group, "SetSiteType",
                 value => Tool.SetSiteKind(value)));
             AddBinding(new TriggerBinding<int>(Group, "SetPlazaCenterPlacement",
@@ -235,6 +240,8 @@ namespace ParkManager.Tools
         internal void SetPathType(int type) => _pathType?.Update(type);
 
         internal void SetSiteType(int type) => _siteType?.Update(type);
+
+        internal void SetLakeEnabled(bool enabled) => _lakeEnabled?.Update(enabled);
 
         internal void SetPlazaPlacementSettings(int centerPlacement,
             int arrangementPlacement, int centerpieceSpacing,

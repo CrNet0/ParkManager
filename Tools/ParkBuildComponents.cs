@@ -35,6 +35,8 @@ namespace ParkManager.Tools
         PlazaCenter = 11,
         NavigationArea = 12,
         AccessMarker = 13,
+        AnimalSpawner = 14,
+        LakeWater = 15,
     }
 
     /// <summary>

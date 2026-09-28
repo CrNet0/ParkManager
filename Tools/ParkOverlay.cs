@@ -25,6 +25,9 @@ namespace ParkManager.Tools
         private static readonly Color Entrance = new Color(0.2f, 0.75f, 1f, 1f);
         private static readonly Color Path = new Color(0.95f, 0.78f, 0.2f, 0.95f);
         private static readonly Color BuildIssue = new Color(1f, 0.2f, 0.16f, 1f);
+        private static readonly Color LakeShore = new Color(0.08f, 0.38f, 0.85f, 1f);
+        private static readonly Color LakeWater = new Color(0.20f, 0.55f, 1f, 0.55f);
+        private static readonly Color AnimalSpawner = new Color(0.95f, 0.45f, 0.15f, 1f);
         private static readonly Color Tree = new Color(0.12f, 0.72f, 0.24f, 0.9f);
         private static readonly Color Bush = new Color(0.32f, 0.88f, 0.34f, 0.9f);
         private static readonly Color Bench = new Color(0.48f, 0.25f, 0.09f, 0.98f);
@@ -105,6 +108,7 @@ namespace ParkManager.Tools
             ParkDecorationPlan plan, bool plaza, float height)
         {
             if (plan == null) return;
+            DrawLake(buffer, plan.Lake, height);
             for (var i = 0; i < plan.Placements.Count; i++)
             {
                 var item = plan.Placements[i];
@@ -128,6 +132,10 @@ namespace ParkManager.Tools
                     case ParkDecorationKind.TrashBin:
                         Rectangle(buffer, TrashBin, center, item.Rotation, 1.2f, 1.2f);
                         break;
+                    case ParkDecorationKind.AnimalSpawner:
+                        Circle(buffer, AnimalSpawner, center, 4f);
+                        Circle(buffer, AnimalSpawner, center, 1.2f);
+                        break;
                     case ParkDecorationKind.PlazaCenter:
                         Circle(buffer, Lamp, center, math.max(3f, item.Size));
                         break;
@@ -140,6 +148,38 @@ namespace ParkManager.Tools
                         break;
                 }
             }
+        }
+
+        /// <summary>
+        /// Draws the planned lake as a filled blue area. The overlay has no
+        /// polygon fill, so close horizontal scanlines clipped to the outline
+        /// read as water, framed by a darker shore line.
+        /// </summary>
+        private static void DrawLake(OverlayRenderSystem.Buffer buffer,
+            IReadOnlyList<float2> lake, float height)
+        {
+            if (lake == null || lake.Count < 3) return;
+            PolygonMath.Bounds(lake, out var min, out var max);
+            const float spacing = 2.5f;
+            var crossings = new List<float>();
+            for (var z = min.y + spacing * 0.5f; z < max.y; z += spacing)
+            {
+                crossings.Clear();
+                for (int i = 0, j = lake.Count - 1; i < lake.Count; j = i++)
+                {
+                    var a = lake[j];
+                    var b = lake[i];
+                    if ((a.y > z) == (b.y > z)) continue;
+                    crossings.Add(a.x + (z - a.y) / (b.y - a.y) * (b.x - a.x));
+                }
+                crossings.Sort();
+                for (var k = 0; k + 1 < crossings.Count; k += 2)
+                    Line(buffer, LakeWater, new float3(crossings[k], height, z),
+                        new float3(crossings[k + 1], height, z), spacing * 1.05f);
+            }
+            for (int i = 0, j = lake.Count - 1; i < lake.Count; j = i++)
+                Line(buffer, LakeShore, new float3(lake[j].x, height, lake[j].y),
+                    new float3(lake[i].x, height, lake[i].y), 0.9f);
         }
 
         private static void Rectangle(OverlayRenderSystem.Buffer buffer,

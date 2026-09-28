@@ -35,6 +35,7 @@ internal static class MockServer
         public int VegetationDensity { get; set; } = 100;
         public int FurnitureDensity { get; set; } = 100;
         public int EnabledMask { get; set; } = 0x2f;
+        public bool LakeEnabled { get; set; } = true;
         public ArrangementDto[] Arrangement { get; set; } = Array.Empty<ArrangementDto>();
     }
     private sealed class PlazaVariantRequest
@@ -163,21 +164,25 @@ internal static class MockServer
             seed, request.PathType == 0 ? 2f : 4f,
             (request.EnabledMask & (1 << 4)) != 0,
             request.VegetationDensity, request.FurnitureDensity,
-            request.EnabledMask);
+            request.EnabledMask, planLake: request.LakeEnabled, planAnimals: true);
         return new {
             seed, siteType = 0, centerFits = true,
             fences = Array.Empty<object>(),
+            lake = decorations.Lake.Select(p => new { x = p.x, y = p.y }).ToArray(),
             paths = paths.Edges.Select(edge => new {
                 ax = paths.Nodes[edge.A].Position.x,
                 ay = paths.Nodes[edge.A].Position.y,
                 bx = paths.Nodes[edge.B].Position.x,
                 by = paths.Nodes[edge.B].Position.y,
+                width = Math.Max(edge.Width, request.PathType == 0 ? 2f : 4f),
                 kind = edge.Kind.ToString(), hidden = false }).ToArray(),
             centers = Array.Empty<object>(),
             furniture = decorations.Placements.Select(x => new {
                 x = x.Position.x, y = x.Position.y,
-                radius = x.Kind == ParkDecorationKind.Tree ? 1.7f
-                    : x.Kind == ParkDecorationKind.Bush ? 0.7f : 0.5f,
+                // Planted Size is the crown diameter.
+                radius = x.Kind == ParkDecorationKind.Tree
+                    || x.Kind == ParkDecorationKind.Bush
+                    || x.Kind == ParkDecorationKind.AnimalSpawner ? x.Size * 0.5f : 0.5f,
                 kind = x.Kind.ToString(), asset = x.ExplicitAssetName ?? "",
                 // Simulates four selected species, as resolved in the ECS layer.
                 species = (int)(x.Variant % 4u), age = (int)x.AgeStage }).ToArray(),

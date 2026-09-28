@@ -7,7 +7,7 @@ import {
   entranceCount$, finishPark, generateDecorations, generatePaths,
   furnitureDensity$, locale$, panelOpen$, pathBuildBusy$,
   pathBuildPresent$, pathBuildStatus$, pathBuildSummary$, pathPlanReady$,
-  pathType$, plannerMode$, pointCount$,
+  pathType$, plannerMode$, pointCount$, lakeEnabled$, setLakeEnabled,
   plazaArrangementPlacement$, plazaArrangementSpacing$,
   plazaCenterOptionsJson$, plazaCenterSelected$, plazaCenterPlacement$,
   plazaCenterpieceSpacing$, plazaFenceEnabled$, selectPlazaCenter,
@@ -61,6 +61,7 @@ export const ParkManagerPanel = () => {
   const rawPathBuildSummary = useValue(pathBuildSummary$);
   const pathBuildStatus = useValue(pathBuildStatus$);
   const pathType = useValue(pathType$);
+  const lakeEnabled = useValue(lakeEnabled$);
   const siteType = useValue(siteType$);
   const plazaCenterPlacement = useValue(plazaCenterPlacement$);
   const plazaArrangementPlacement = useValue(plazaArrangementPlacement$);
@@ -206,6 +207,18 @@ export const ParkManagerPanel = () => {
                 ? t.plazaAccesses(entranceCount) : t.pathsGates(entranceCount)}</StatePill>
               {pathPlanReady ? <StatePill success>{workflowSteps[1]}</StatePill> : null}
             </div>
+            {!isPlaza ? <div className={`${styles.compactSetting} ${styles.lakeSetting}`}
+              data-testid="lake-selector">
+              <span>{t.lake}</span>
+              <div className={styles.segmentedControl}>
+                <button className={!lakeEnabled ? styles.segmentActive : ""}
+                  disabled={busy || decorationBuildPresent} aria-pressed={!lakeEnabled}
+                  onClick={() => setLakeEnabled(false)}>{t.lakeOff}</button>
+                <button className={lakeEnabled ? styles.segmentActive : ""}
+                  disabled={busy || decorationBuildPresent} aria-pressed={lakeEnabled}
+                  onClick={() => setLakeEnabled(true)}>{t.lakeOn}</button>
+              </div>
+            </div> : null}
           </div>
           {isPlaza ? renderPlazaAssetSelectors() : null}
         </div>

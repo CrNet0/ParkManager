@@ -418,6 +418,13 @@
   text-align: left;
 }
 
+// The park lake switch lives in the free space of the info column, so the
+// path step keeps its height and does not cover more of the map.
+.lakeSetting {
+  max-width: 420rem;
+  margin-top: @panelGap;
+}
+
 .compactSetting .segmentedControl {
   flex: 1 1 auto;
   min-width: 0;
