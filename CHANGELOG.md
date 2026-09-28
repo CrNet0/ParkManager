@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Redesign the panel as a flat bar at the top of the screen, inspired by the Parking Lot Tool: the four-step wizard with its back and forward pages is gone. All settings stay reachable in coloured groups side by side (paths & surface, planting, furnishing; for plazas centerpiece, arrangement, surface & fence), and one main button always offers the next step: set entrances, plan, plan furnishings, build, finish. Outline and entrance editing switch in the header, next to the game's snapping options and the status line.
+- Furnishing assets and the plaza arrangement open in a dropdown window as wide as the bar instead of enlarging it; category chips carry a checkbox to include the category and a caret that opens its assets. The park lake is a checkbox chip next to trees and shrubs.
+- The header shows only build warnings and errors; routine status messages no longer take space. "New variant" and "Rearrange" buttons are yellow; selected and opened elements share one blue highlight.
+- Use the game's own tooltips (`title` has no effect in Cohtml) for tiles, icon buttons and the main button; shorter labels keep the bar compact.
+- Cohtml fixes: draw ↻, arrows and the asset placeholder as SVG icons (the game font lacks these glyphs), render slider values as one text node so "100 %" no longer wraps, size header segments to their text instead of collapsing them, and centre the checkbox ticks.
+
 ## 0.6.5 – rc.1
 
 - Park lakes (experimental): parks find their largest open space between the paths and outline an organic lake with an 8 m shore strip; the overlay shows it in blue and planting keeps clear of it. After the park is built, the game's level brushes excavate the basin 5 m below the lowest shore point and a constant-level water source fills it 1 m below the shore. The water source is removed with the park; the basin is not yet refilled. A lake-bed surface follows. A "Lake: Off / On" switch in the surface step (default on) plans parks with or without a lake; it is locked once the furnishings are built.

@@ -73,11 +73,13 @@ free local port, runs Playwright, then stops only that server. An already-open
 interactive mock on port 8765 is unaffected. The test project builds without
 `ParkManager.csproj` or the official modding-toolchain imports.
 
-The tests cover drawing and stage progression, live planning/seed changes,
-common panel insets, flex-column spacing, compact-width containment, toolbar
-separation, and a compiled-CSS guard against `display: grid`. Chromium cannot
-prove that CS2's Gameface renderer accepts every CSS rule, so an in-game visual
-pass remains necessary before deployment.
+The tests cover the main-button progression from outline to finished build,
+entrance and outline modes, rejected builds, live planning/seed changes, the
+asset window below the bar, flat side-by-side bar groups, compact-width
+containment, toolbar separation, and a compiled-CSS guard against
+`display: grid` and auto margins. Chromium cannot prove that CS2's Gameface
+renderer accepts every CSS rule, so an in-game visual pass remains necessary
+before deployment.
 
 Gameface's Yoga layout does not support CSS Grid. Production panel columns
 therefore use sized Flexbox items; Playwright checks their geometry in Chromium

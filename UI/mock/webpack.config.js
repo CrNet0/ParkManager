@@ -8,7 +8,10 @@ module.exports = {
   externals: {},
   resolve: {
     ...base.resolve,
-    alias: { 'cs2/api': path.resolve(__dirname, 'mockApi.ts') },
+    alias: {
+      'cs2/api': path.resolve(__dirname, 'mockApi.ts'),
+      'cs2/ui': path.resolve(__dirname, 'mockUi.tsx'),
+    },
   },
   output: {
     path: path.resolve(__dirname, 'dist'),

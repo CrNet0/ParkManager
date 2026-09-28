@@ -6,124 +6,109 @@ async function rect(page: Page, testId: string) {
   return box!;
 }
 
-async function expectNoPanelHeadingOrStageCounter(page: Page) {
-  const body = page.getByTestId('panel-body');
-  await expect(body.locator('h2')).toHaveCount(0);
-  await expect(body.locator('.eyebrow')).toHaveCount(0);
+const corners = [
+  { x: 260, y: 360 }, { x: 1000, y: 360 },
+  { x: 1000, y: 650 }, { x: 260, y: 650 },
+];
+
+async function drawOutline(page: Page) {
+  const map = page.locator('.map svg');
+  for (const corner of corners) await map.click({ position: corner });
+  await map.click({ position: corners[0] });
+  return map;
 }
 
-test('outline clicks lead to entrances and a live path preview', async ({ page }) => {
+const mainAction = (page: Page) => page.getByTestId('main-action');
+
+test('the main button walks a park from outline to finished build', async ({ page }) => {
   await page.goto('/');
-  await expectNoPanelHeadingOrStageCounter(page);
-  const progressSteps = page.getByTestId('workflow-progress').getByTestId('workflow-step');
-  await expect(progressSteps).toHaveCount(4);
-  await expect(page.getByTestId('workflow-progress').getByRole('button')).toHaveCount(0);
-  await expect(progressSteps.nth(0)).toHaveAttribute('aria-current', 'step');
-  await progressSteps.nth(1).click();
-  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '0');
   await expect.poll(() => page.getByTestId('brand-logo').evaluate((image) =>
     (image as HTMLImageElement).complete
       && (image as HTMLImageElement).naturalWidth > 0)).toBe(true);
-  const map = page.locator('.map svg');
-  const corners = [
-    { x: 260, y: 360 }, { x: 1000, y: 360 },
-    { x: 1000, y: 650 }, { x: 260, y: 650 },
-  ];
-  for (const corner of corners) await map.click({ position: corner });
-  await map.click({ position: corners[0] });
-  const footer = page.getByTestId('panel-footer');
-  await expect(footer.locator('button').last()).toBeEnabled();
-  await footer.locator('button').last().click();
-  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '1');
-  await expectNoPanelHeadingOrStageCounter(page);
-  await progressSteps.nth(2).click();
-  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '1');
+  const body = page.getByTestId('panel-body');
+  await expect(mainAction(page)).toHaveAttribute('data-action', 'drawOutline');
+  await expect(mainAction(page)).toBeDisabled();
+  await expect(page.getByTestId('snap-controls')).toBeVisible();
+
+  const map = await drawOutline(page);
+  await expect(mainAction(page)).toHaveAttribute('data-action', 'placeEntrances');
+  await expect(page.getByTestId('outline-state')).toHaveText('4 Punkte · bereit für die Planung');
+  await mainAction(page).click();
+  const mode = page.getByTestId('mode-selector');
+  await expect(mode.getByRole('button', { name: 'Eingänge', exact: true }))
+    .toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('snap-controls')).toHaveCount(0);
+  await expect(mainAction(page)).toHaveAttribute('data-action', 'markEntrance');
+  await expect(mainAction(page)).toBeDisabled();
+
   await map.click({ position: { x: 610, y: 360 } });
-  const createVariant = footer.getByRole('button', { name: 'Variante erstellen' });
-  const continueToFurnishings = footer.getByRole('button', {
-    name: 'Weiter zur Ausstattung' });
-  await expect(createVariant).toBeEnabled();
-  await createVariant.click();
+  await expect(page.getByTestId('action-column')).toContainText('1 Eingang markiert');
+  await expect(mainAction(page)).toHaveText('Park planen');
+  await mainAction(page).click();
   await expect.poll(() => page.locator('.map svg line').count()).toBeGreaterThan(0);
   await expect(page.getByText(/Live-Layout/)).toBeVisible();
-  await expect(continueToFurnishings).toBeDisabled();
+  await expect(page.getByTestId('paths-variant')).toBeEnabled();
+
+  // Without a ground surface the main button only says what is missing.
+  await expect(mainAction(page)).toHaveAttribute('data-action', 'chooseSurface');
+  await expect(mainAction(page)).toBeDisabled();
   await page.getByTestId('park-surface-choices')
     .getByRole('button', { name: 'Gras 1', exact: true }).click();
-  await expect(continueToFurnishings).toBeEnabled();
-  await continueToFurnishings.click();
-  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '2');
-  await footer.getByRole('button', { name: 'Zurück zum Untergrund' }).click();
-  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '1');
-  await expect(footer.getByRole('button', { name: 'Neue Variante' }))
-    .toBeEnabled();
-  await expect(continueToFurnishings).toBeEnabled();
-  await continueToFurnishings.click();
-  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '2');
+  // A changed asset choice discards the furnishing preview; plan it again.
+  await expect(mainAction(page)).toHaveText('Ausstattung planen');
+  await mainAction(page).click();
+  await expect(mainAction(page)).toHaveText('Park bauen');
+  await mainAction(page).click();
+  await expect(body).toHaveAttribute('data-decorations-built', 'true');
+  await expect(body).toHaveAttribute('data-paths-built', 'true');
+  await expect(page.getByTestId('park-surface-choices').locator('button').first())
+    .toBeDisabled();
+  await expect(page.getByTestId('remove-built')).toBeVisible();
+  await expect(mainAction(page)).toHaveText('Park fertigstellen');
+  await mainAction(page).click();
+  await expect(body).toHaveAttribute('data-paths-built', 'false');
+  await expect(page.getByTestId('outline-state')).toHaveText('Noch keine Punkte gesetzt');
+});
+
+test('the outline can be edited again while entrances are set', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'paths', exact: true }).click();
+  const mode = page.getByTestId('mode-selector');
+  const outline = mode.getByRole('button', { name: 'Umriss', exact: true });
+  await outline.click();
+  await expect(outline).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('snap-controls')).toBeVisible();
+  await mode.getByRole('button', { name: 'Eingänge', exact: true }).click();
+  await expect(page.getByTestId('snap-controls')).toHaveCount(0);
 });
 
 for (const plaza of [false, true]) {
-  test(`${plaza ? 'plaza' : 'park'} navigation preserves previews and only builds at the final step`, async ({ page }) => {
+  test(`a rejected ${plaza ? 'plaza' : 'park'} build keeps both previews`, async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: plaza ? 'plaza' : 'paths', exact: true }).click();
+    await page.getByRole('button', { name: plaza ? 'plaza' : 'decorated', exact: true }).click();
     const body = page.getByTestId('panel-body');
-    const footer = page.getByTestId('panel-footer');
-    const forward = plaza ? 'Weiter zu den Plaza-Details' : 'Weiter zur Ausstattung';
-    const back = plaza ? 'Zurück zur Grundstruktur' : 'Zurück zum Untergrund';
-    const backDetails = plaza ? 'Zurück zu den Plaza-Details' : 'Zurück zur Ausstattung';
-    const unbuilt = async () => {
-      await expect(body).toHaveAttribute('data-paths-built', 'false');
-      await expect(body).toHaveAttribute('data-decorations-built', 'false');
-    };
-    await footer.getByRole('button', { name: 'Umriss bearbeiten' }).click();
-    await expect(body).toHaveAttribute('data-stage', '0');
-    await footer.getByRole('button', { name: 'Weiter zu den Eingängen' }).click();
-    await footer.getByRole('button', { name: forward }).click();
-    await expect(body).toHaveAttribute('data-stage', '2');
-    await unbuilt();
-    await footer.getByRole('button', { name: back, exact: true }).click();
-    await expect(footer.getByRole('button', { name: 'Neue Variante' })).toBeEnabled();
-    await footer.getByRole('button', { name: forward }).click();
-    if (!plaza) {
-      await expect(footer.getByRole('button', { name: 'Weiter zum Abschluss' })).toBeDisabled();
-      await footer.getByRole('button', { name: 'Ausstattung planen' }).click();
-    }
-    await footer.getByRole('button', { name: 'Weiter zum Abschluss' }).click();
-    await expect(body).toHaveAttribute('data-stage', '3');
-    await unbuilt();
-    await footer.getByRole('button', { name: backDetails, exact: true }).click();
-    await expect(body).toHaveAttribute('data-stage', '2');
-    await footer.getByRole('button', { name: 'Weiter zum Abschluss' }).click();
-    // A rejected build keeps both previews and unlocks navigation again.
+    await expect(mainAction(page)).toHaveAttribute('data-action', 'build');
     await page.getByRole('button', { name: 'Fehlerstatus testen' }).click();
-    await footer.getByRole('button', { name: plaza ? 'Plaza bauen' : 'Park bauen', exact: true }).click();
-    await expect(footer.getByRole('button', { name: backDetails, exact: true })).toBeDisabled();
-    await expect(footer.getByRole('button', { name: backDetails, exact: true })).toBeEnabled();
-    await unbuilt();
-    await footer.getByRole('button', { name: backDetails, exact: true }).click();
-    await footer.getByRole('button', { name: back, exact: true }).click();
-    await footer.getByRole('button', { name: 'Neue Variante' }).click();
-    await footer.getByRole('button', { name: forward }).click();
-    await footer.getByRole('button', { name: 'Weiter zum Abschluss' }).click();
-    await footer.getByRole('button', { name: plaza ? 'Plaza bauen' : 'Park bauen', exact: true }).click();
-    await expect(body).toHaveAttribute('data-decorations-built', 'true');
-    await expect(body).toHaveAttribute('data-paths-built', 'true');
-    await expect(body).toHaveAttribute('data-stage', '3');
-    await expect(footer.getByRole('button', { name: backDetails, exact: true })).toBeDisabled();
-    await footer.getByRole('button', { name: plaza ? 'Plaza fertigstellen' : 'Park fertigstellen' }).click();
-    await expect(body).toHaveAttribute('data-stage', '0');
-    await unbuilt();
+    await mainAction(page).click();
+    await expect(mainAction(page)).toHaveAttribute('data-action', 'busy');
+    await expect(page.getByTestId('reset-outline')).toBeDisabled();
+    await expect(mainAction(page)).toHaveAttribute('data-action', 'build');
+    await expect(body).toHaveAttribute('data-paths-built', 'false');
+    await expect(body).toHaveAttribute('data-decorations-built', 'false');
+    await expect(page.getByTestId('paths-variant')).toBeEnabled();
   });
 }
 
-test('path notices use explicit status and plazas call the step Structure', async ({ page }) => {
+test('path notices use explicit status in the header', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'plaza', exact: true }).click();
-  await expect(page.getByTestId('workflow-progress').getByTestId('workflow-step').nth(1))
-    .toContainText(/Grundstruktur|Structure/);
   await page.getByRole('button', { name: 'Fehlerstatus testen' }).click();
   const notice = page.getByRole('alert');
   await expect(notice).toHaveAttribute('data-status', 'error');
   await expect(notice).toHaveText('Validation failed: selected area is blocked.');
+  const header = await rect(page, 'panel-header');
+  const box = (await notice.boundingBox())!;
+  expect(box.y + box.height).toBeLessThanOrEqual(header.y + header.height);
 });
 
 test('message keys from the game are translated for the active language', async ({ page }) => {
@@ -136,34 +121,25 @@ test('message keys from the game are translated for the active language', async 
     'Hinweis: Weg stark geneigt bei X 12, Z 0. Bau wird trotzdem versucht.');
   await page.getByRole('button', { name: 'Sprache wechseln' }).click();
   await expect(notice).toHaveText('Note: steep path at X 12, Z 0. Building anyway.');
+  await expect(mainAction(page)).toHaveText('Build plaza');
   await page.getByRole('button', { name: 'Sprache wechseln' }).click();
   await page.getByRole('button', { name: 'Fehlerstatus testen' }).click();
   // Plain text (older builds, mock values) is still shown verbatim.
   await expect(notice).toHaveText('Validation failed: selected area is blocked.');
 });
 
-test('a plaza can be drawn, configured, built, furnished, and finished', async ({ page }) => {
+test('a plaza can be drawn, configured, built and finished', async ({ page }) => {
   await page.goto('/');
-  await expectNoPanelHeadingOrStageCounter(page);
-  const map = page.locator('.map svg');
-  const corners = [
-    { x: 260, y: 360 }, { x: 1000, y: 360 },
-    { x: 1000, y: 650 }, { x: 260, y: 650 },
-  ];
-  for (const corner of corners) await map.click({ position: corner });
-  await map.click({ position: corners[0] });
-
-  const footer = page.getByTestId('panel-footer');
-  await footer.getByRole('button', { name: /Weiter zu den Eingängen/ }).click();
-  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '1');
-  await expectNoPanelHeadingOrStageCounter(page);
-
-  const settings = page.getByTestId('path-settings');
-  // Mark the entrance while the compact path layout leaves the map click area clear.
+  const map = await drawOutline(page);
+  await mainAction(page).click();
   await map.click({ position: { x: 610, y: 360 } });
-  await expect(page.getByTestId('panel-body')).toContainText('1 Eingang markiert');
-  await settings.getByRole('button', { name: 'Plaza', exact: true }).click();
-  await expect(page.getByTestId('panel-body')).toContainText('1 Zugang markiert');
+  const actions = page.getByTestId('action-column');
+  await expect(actions).toContainText('1 Eingang markiert');
+  await page.getByTestId('site-type-selector')
+    .getByRole('button', { name: 'Plaza', exact: true }).click();
+  await expect(actions).toContainText('1 Zugang markiert');
+  await expect(page.getByTestId('mode-selector')
+    .getByRole('button', { name: 'Zugänge', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Mock Fountain', exact: true }).click();
   const fence = page.getByTestId('plaza-fence-choices')
     .getByRole('button', { name: 'Zaun 1', exact: true });
@@ -172,52 +148,31 @@ test('a plaza can be drawn, configured, built, furnished, and finished', async (
   await page.getByTestId('plaza-surface-choices')
     .getByRole('button', { name: 'Gras 1', exact: true }).click();
 
-  await footer.getByRole('button', { name: 'Variante erstellen' }).click();
+  await expect(mainAction(page)).toHaveText('Plaza planen');
+  await mainAction(page).click();
   await expect(page.getByTestId('live-plan-summary')).toContainText('Plaza-Regeln');
-  await expect.poll(() => page.getByTestId('live-centerpiece').count())
-    .toBeGreaterThan(0);
-  await expect.poll(() => page.getByTestId('live-furniture').count())
-    .toBeGreaterThan(0);
-  await expect.poll(() => page.getByTestId('live-plaza-fence').count())
-    .toBeGreaterThan(0);
+  await expect.poll(() => page.getByTestId('live-centerpiece').count()).toBeGreaterThan(0);
+  await expect.poll(() => page.getByTestId('live-furniture').count()).toBeGreaterThan(0);
+  await expect.poll(() => page.getByTestId('live-plaza-fence').count()).toBeGreaterThan(0);
 
-  await footer.getByRole('button', { name: 'Weiter zu den Plaza-Details' }).click();
-  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '2');
-  await expectNoPanelHeadingOrStageCounter(page);
-  const backToStructure = footer.getByRole('button', { name: 'Zurück zur Grundstruktur' });
-  await expect(backToStructure).toHaveClass(/backButton/);
-  await expect(backToStructure).not.toHaveClass(/dangerButton/);
-  await expect(backToStructure.locator('img')).toHaveCSS('transform', 'matrix(-1, 0, 0, -1, 0, 0)');
-  await backToStructure.click();
-  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '1');
-  const continueToDetails = footer.getByRole('button', {
-    name: 'Weiter zu den Plaza-Details' });
-  await expect(continueToDetails).toBeEnabled();
-  await continueToDetails.click();
-  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '2');
+  await page.getByTestId('plaza-arrangement-edit').click();
+  await expect(page.getByTestId('asset-window')).toBeVisible();
   const slots = page.getByTestId('plaza-arrangement-slots');
-  await slots.getByTitle('Element hinzufügen').click();
-  await page.getByTestId('plaza-arrangement-picker')
-    .getByRole('button', { name: 'Laternen', exact: true }).click();
-  await page.getByTestId('plaza-arrangement-picker')
-    .getByRole('button', { name: 'Laterne 1', exact: true }).click();
+  await slots.getByRole('button', { name: 'Element hinzufügen' }).click();
+  const picker = page.getByTestId('plaza-arrangement-picker');
+  await picker.getByRole('button', { name: 'Laternen', exact: true }).click();
+  await picker.getByRole('button', { name: 'Laterne 1', exact: true }).click();
   await expect(slots.getByRole('button').nth(1)).toContainText('Laterne 1');
+  await page.getByTestId('plaza-arrangement-edit').click();
+  await expect(page.getByTestId('asset-window')).toHaveCount(0);
 
-  await footer.getByRole('button', { name: 'Weiter zum Abschluss' }).click();
-  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '3');
-  await expectNoPanelHeadingOrStageCounter(page);
-  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-paths-built', 'false');
-  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-decorations-built', 'false');
-  await footer.getByRole('button', { name: 'Zurück zu den Plaza-Details' }).click();
-  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '2');
-  await footer.getByRole('button', { name: 'Weiter zum Abschluss' }).click();
-  await footer.getByRole('button', { name: 'Plaza bauen' }).click();
-  await expect(footer.getByRole('button', { name: 'Zurück zu den Plaza-Details' })).toBeDisabled();
+  await expect(mainAction(page)).toHaveText('Plaza bauen');
+  await mainAction(page).click();
   await expect(page.getByTestId('panel-body')).toHaveAttribute('data-decorations-built', 'true');
-  await expect(page.getByTestId('panel-body')).toContainText(/Plaza-Untergrund gebaut/);
-  await footer.getByRole('button', { name: 'Plaza fertigstellen' }).click();
-  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '0');
-  await expect(page.getByText('Noch keine Punkte gesetzt')).toBeVisible();
+  await expect(page.getByTestId('remove-built')).toHaveText('Plaza entfernen');
+  await expect(page.getByRole('button', { name: 'Mock Fountain', exact: true })).toBeDisabled();
+  await mainAction(page).click();
+  await expect(page.getByTestId('outline-state')).toHaveText('Noch keine Punkte gesetzt');
 });
 
 test('a new plaza variant rolls reproducible settings into the controls', async ({ page }) => {
@@ -226,7 +181,7 @@ test('a new plaza variant rolls reproducible settings into the controls', async 
     await page.getByRole('button', { name: 'plaza', exact: true }).click();
     const summary = page.getByTestId('live-plan-summary');
     await expect(summary).toContainText('Plaza-Regeln · Seed 1');
-    await page.getByRole('button', { name: 'Neue Variante' }).click();
+    await page.getByTestId('paths-variant').click();
     await expect(summary).toContainText('Seed 2');
     expect(await page.locator('.map svg line').count()).toBe(0);
     const pressed = await page.getByTestId('panel-body')
@@ -238,14 +193,14 @@ test('a new plaza variant rolls reproducible settings into the controls', async 
   };
   const first = await rollOnce();
   expect(await rollOnce()).toBe(first);
-  await page.getByRole('button', { name: 'Neue Variante' }).click();
+  await page.getByTestId('paths-variant').click();
   await expect(page.getByTestId('live-plan-summary')).toContainText('Seed 3');
 });
 
-test('shared plaza sliders support arrow, home, end, and page keys', async ({ page }) => {
+test('shared sliders support arrow, home, end, and page keys', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'plaza', exact: true }).click();
-  const slider = page.getByRole('slider', { name: 'Abstand zum Zentrum' });
+  const slider = page.getByRole('slider', { name: 'Zur Mitte' });
   await expect(slider).toHaveAttribute('aria-valuenow', '4');
   await slider.focus();
 
@@ -259,25 +214,23 @@ test('shared plaza sliders support arrow, home, end, and page keys', async ({ pa
   await expect(slider).toHaveAttribute('aria-valuenow', '10');
 });
 
-test('shared sliders react to game-compatible mouse events in every workflow', async ({ page }) => {
+test('shared sliders react to game-compatible mouse events', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'decorated', exact: true }).click();
-  await page.getByRole('button', { name: 'Weiter zur Ausstattung' }).click();
-  const plantDensity = page.getByRole('slider', { name: 'Pflanzendichte' });
+  const plantDensity = page.getByTestId('plant-density').getByRole('slider');
   await plantDensity.click({ position: { x: 1, y: 10 } });
   await expect(plantDensity).toHaveAttribute('aria-valuenow', '25');
-  const furnitureDensity = page.getByRole('slider', { name: 'Ausstattungsdichte' });
+  const furnitureDensity = page.getByTestId('furniture-density').getByRole('slider');
   const furnitureBox = await furnitureDensity.boundingBox();
   await furnitureDensity.click({ position: { x: furnitureBox!.width - 2, y: 10 } });
   await expect(furnitureDensity).toHaveAttribute('aria-valuenow', '200');
 
   await page.getByRole('button', { name: 'plaza', exact: true }).click();
-  const arrangementSpacing = page.getByRole('slider', { name: /Abstand zum Zentrum/ });
+  const arrangementSpacing = page.getByRole('slider', { name: 'Zur Mitte' });
   const spacingBox = await arrangementSpacing.boundingBox();
   await arrangementSpacing.click({ position: { x: spacingBox!.width - 2, y: 10 } });
   await expect(arrangementSpacing).toHaveAttribute('aria-valuenow', '20');
-  await page.getByTestId('panel-footer').locator('button').last().click();
-  const arrangementDensity = page.getByRole('slider', { name: 'Arrangement-Dichte' });
+  const arrangementDensity = page.getByTestId('plaza-density').getByRole('slider');
   await arrangementDensity.click({ position: { x: 1, y: 10 } });
   await expect(arrangementDensity).toHaveAttribute('aria-valuenow', '25');
 });
@@ -288,255 +241,130 @@ test('shipped panel CSS avoids unsupported CSS Grid', async ({ page }) => {
   const css = await response.text();
   expect(css).not.toMatch(/display:\s*grid\b/);
   expect(css).not.toMatch(/grid-template-/);
+  expect(css).not.toMatch(/margin-left:\s*auto/);
 });
 
-test('asset columns use stable flex layout with uniform gaps', async ({ page }) => {
+test('the bar stays flat and keeps its groups side by side', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'decorated', exact: true }).click();
-  await page.getByRole('button', { name: 'Weiter zur Ausstattung' }).click();
-  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '2');
-  const info = await rect(page, 'asset-header');
-  const sliders = await rect(page, 'density-settings');
-  const grid = await rect(page, 'asset-grid');
-  const chooser = await rect(page, 'asset-chooser');
-  const footer = await rect(page, 'panel-footer');
-  const flowPositions = await page.evaluate(() => ['asset-header',
-    'density-settings', 'asset-workspace'].map((id) =>
-    getComputedStyle(document.querySelector(`[data-testid="${id}"]`)!).position));
-  expect(flowPositions).toEqual(['static', 'static', 'static']);
-  expect(sliders.x - (info.x + info.width)).toBeGreaterThanOrEqual(8);
-  expect(chooser.x - (grid.x + grid.width)).toBeGreaterThanOrEqual(8);
-  expect(grid.y - (info.y + info.height)).toBeGreaterThanOrEqual(8);
-  expect(footer.y - (chooser.y + chooser.height)).toBeGreaterThanOrEqual(8);
-  expect(Math.abs(grid.height - chooser.height)).toBeLessThan(2);
-  expect(Math.abs(grid.width - chooser.width)).toBeLessThan(2);
-  const tiles = await page.getByTestId('asset-grid').locator('[role="button"]').all();
-  expect(tiles).toHaveLength(6);
-  const treeChoices = page.getByTestId('asset-chooser').getByRole('button');
-  await expect(treeChoices).toHaveCount(18);
-  const iconlessTree = page.getByRole('button', { name: 'Baum 1', exact: true });
-  await expect(iconlessTree).toBeVisible();
-  await expect(iconlessTree.locator('img')).toHaveCount(0);
-  await expect(iconlessTree).toContainText('✦');
-  const tileBoxes = await Promise.all(tiles.map((tile) => tile.boundingBox()));
-  expect(Math.abs(tileBoxes[0]!.y - tileBoxes[2]!.y)).toBeLessThan(2);
-  expect(tileBoxes[3]!.y).toBeGreaterThan(tileBoxes[0]!.y + 50);
-  const values = await page.locator('[role="slider"] + strong').all();
-  for (const value of values) {
-    const box = await value.boundingBox();
-    expect(box!.width).toBeGreaterThanOrEqual(60);
-    expect(box!.height).toBeLessThan(30);
-    expect(await value.textContent()).toMatch(/^\d+%$/);
+  for (const preset of ['empty', 'decorated', 'plaza']) {
+    await page.getByRole('button', { name: preset, exact: true }).click();
+    const panel = await rect(page, 'park-panel');
+    const header = await rect(page, 'panel-header');
+    const actions = await rect(page, 'action-column');
+    const columns = await page.getByTestId('panel-body').locator('section').all();
+    expect(columns).toHaveLength(4);
+    const boxes = await Promise.all(columns.map((column) => column.boundingBox()));
+    for (let i = 1; i < boxes.length; i++) {
+      expect(Math.abs(boxes[i]!.y - boxes[0]!.y)).toBeLessThan(2);
+      expect(boxes[i]!.x - (boxes[i - 1]!.x + boxes[i - 1]!.width))
+        .toBeGreaterThanOrEqual(7);
+    }
+    expect(actions.x + actions.width).toBeLessThanOrEqual(panel.x + panel.width - 7);
+    expect(header.height).toBeLessThanOrEqual(44);
+    // Far flatter than the old 4-step wizard; the map stays visible.
+    expect(panel.height).toBeLessThanOrEqual(260);
+    expect(panel.width).toBeLessThanOrEqual(1245);
+    // Cohtml wraps separate text nodes, so "100" and "%" must be one node.
+    const valueNodes = await page.locator('[role="slider"] + strong').evaluateAll(
+      (items) => items.map((item) => item.childNodes.length));
+    expect(valueNodes.every((count) => count === 1)).toBe(true);
+    for (const segment of await page.getByTestId('panel-header')
+      .locator('[aria-pressed]').all()) {
+      if (await segment.locator('img').count() > 0) continue;
+      expect((await segment.boundingBox())!.width).toBeGreaterThanOrEqual(70);
+    }
   }
-  await page.screenshot({ path: 'test-results/asset-layout.png' });
+  await page.screenshot({ path: 'test-results/bar-layout.png' });
 });
 
-test('mock toolbar remains below the panel at compact viewport', async ({ page }) => {
+test('mock toolbar remains below the bar at compact viewport', async ({ page }) => {
   await page.setViewportSize({ width: 1059, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'decorated', exact: true }).click();
-  await page.getByRole('button', { name: 'Weiter zur Ausstattung' }).click();
-  const panel = await rect(page, 'park-panel');
-  const toolbar = await page.locator('.mockbar').boundingBox();
-  expect(toolbar).not.toBeNull();
-  expect(toolbar!.y).toBeGreaterThanOrEqual(panel.y + panel.height);
+  for (const preset of ['decorated', 'plaza']) {
+    await page.getByRole('button', { name: preset, exact: true }).click();
+    const panel = await rect(page, 'park-panel');
+    const toolbar = await page.locator('.mockbar').boundingBox();
+    expect(toolbar!.y).toBeGreaterThanOrEqual(panel.y + panel.height);
+    const overflow = await page.getByTestId('panel-body').evaluate((element) =>
+      element.scrollWidth - element.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
+  }
   await page.screenshot({ path: 'test-results/compact-layout.png' });
 });
 
-test('all workflow panels preserve the same outer inset', async ({ page }) => {
+test('asset chips open one category window below the bar', async ({ page }) => {
   await page.goto('/');
-  for (const preset of ['empty', 'paths', 'decorated']) {
-    await page.getByRole('button', { name: preset, exact: true }).click();
-    if (preset === 'decorated') await page.getByRole('button', { name: 'Weiter zur Ausstattung' }).click();
-    const positions = await page.evaluate(() => {
-      const header = document.querySelector('[data-testid="panel-header"]')!;
-      const body = document.querySelector('[data-testid="panel-body"]')!;
-      const footer = document.querySelector('[data-testid="panel-footer"]')!;
-      return [header, body, footer].map((element) =>
-        element.firstElementChild!.getBoundingClientRect().left);
-    });
-    expect(Math.max(...positions) - Math.min(...positions)).toBeLessThan(2);
-  }
+  await page.getByRole('button', { name: 'decorated', exact: true }).click();
+  const chips = page.getByTestId('panel-body').locator('[data-testid^="chip-"]');
+  await expect(chips).toHaveCount(6);
+  await page.getByRole('button', { name: 'Bäume auswählen' }).click();
+  const window = page.getByTestId('asset-window');
+  await expect(window).toBeVisible();
+  const bar = await rect(page, 'park-panel');
+  const windowBox = (await window.boundingBox())!;
+  expect(windowBox.y).toBeGreaterThanOrEqual(bar.y + bar.height + 6);
+  // The dropdown spans the bar and every opener shows a caret.
+  expect(Math.abs(windowBox.width - bar.width)).toBeLessThan(2);
+  expect(Math.abs(windowBox.x - bar.x)).toBeLessThan(2);
+  await expect(page.getByTestId('panel-body').locator('[aria-expanded] svg'))
+    .toHaveCount(6);
+
+  const treeChoices = page.getByTestId('asset-chooser').getByRole('button');
+  await expect(treeChoices).toHaveCount(18);
+  const iconlessTree = page.getByRole('button', { name: 'Baum 1', exact: true });
+  await expect(iconlessTree.locator('img')).toHaveCount(0);
+  await expect(iconlessTree.locator('svg')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Baum 3', exact: true }).click();
+  await expect(page.getByTestId('chip-tree')).toContainText('1');
+
+  await window.getByRole('button', { name: 'Bänke', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Bank 2', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Bänke auswählen' }))
+    .toHaveAttribute('aria-expanded', 'true');
+  await window.getByRole('button', { name: 'Schließen' }).click();
+  await expect(window).toHaveCount(0);
+
+  const fenceToggle = page.getByTestId('chip-fence').getByRole('button').first();
+  await expect(fenceToggle).toHaveAttribute('aria-pressed', 'false');
+  await fenceToggle.click();
+  await expect(fenceToggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(mainAction(page)).toHaveText('Ausstattung planen');
 });
 
-test('path options remain inside panel at compact viewport', async ({ page }) => {
-  await page.setViewportSize({ width: 1059, height: 800 });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'paths', exact: true }).click();
-  const body = await rect(page, 'panel-body');
-  const settings = await rect(page, 'path-settings');
-  expect(settings.x).toBeGreaterThanOrEqual(body.x);
-  expect(settings.x + settings.width).toBeLessThanOrEqual(body.x + body.width);
-  expect(settings.y + settings.height).toBeLessThanOrEqual(body.y + body.height);
-});
-
-test('path panel text aligns top while Plaza selectors remain at the bottom', async ({ page }) => {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'paths', exact: true }).click();
-
-  const copy = page.getByTestId('path-stage-copy');
-  const alignment = await copy.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return { alignSelf: style.alignSelf, justifyContent: style.justifyContent };
-  });
-  expect(alignment).toEqual({ alignSelf: 'stretch', justifyContent: 'space-between' });
-
-  const parkCopy = await rect(page, 'path-stage-copy');
-  const parkIntro = await rect(page, 'path-stage-intro');
-  const parkState = await rect(page, 'path-stage-state');
-  expect(parkIntro.y).toBeCloseTo(parkCopy.y, 0);
-  expect(parkState.y).toBeGreaterThanOrEqual(parkIntro.y);
-
-  await page.getByTestId('path-settings')
-    .getByRole('button', { name: 'Plaza', exact: true }).click();
-  const plazaCopy = await rect(page, 'path-stage-copy');
-  const plazaIntro = await rect(page, 'path-stage-intro');
-  const plazaSelectors = await rect(page, 'plaza-asset-selectors');
-  const plazaCenter = await rect(page, 'plaza-center-group');
-  const plazaFence = await rect(page, 'plaza-fence-group');
-  expect(plazaIntro.y).toBeCloseTo(plazaCopy.y, 0);
-  expect(plazaSelectors.y + plazaSelectors.height).toBeCloseTo(
-    plazaCopy.y + plazaCopy.height, 0);
-  expect(plazaCenter.y + plazaCenter.height).toBeLessThanOrEqual(plazaFence.y);
-  expect(plazaFence.y + plazaFence.height).toBeCloseTo(
-    plazaSelectors.y + plazaSelectors.height, 0);
-});
-
-test('Park and Plaza path steps share the same settings column scale', async ({ page }) => {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'paths', exact: true }).click();
-  const settings = page.getByTestId('path-settings');
-  const firstSetting = settings.locator(':scope > div').first();
-  const readLayout = async () => ({
-    labelWidth: (await firstSetting.locator('span').first().boundingBox())!.width,
-    controlHeight: (await firstSetting.boundingBox())!.height,
-    settingsSpacing: await settings.evaluate((element) => {
-      const first = element.children[0].getBoundingClientRect();
-      const second = element.children[1].getBoundingClientRect();
-      return second.top - first.bottom;
-    }),
-  });
-  const park = await readLayout();
-  await settings.getByRole('button', { name: 'Plaza', exact: true }).click();
-  const plaza = await readLayout();
-
-  expect(plaza).toEqual(park);
-  expect(park.labelWidth).toBeGreaterThan(170);
-  expect(park.controlHeight).toBeGreaterThanOrEqual(39);
-});
-
-test('plaza center choices wrap instead of clipping their last item', async ({ page }) => {
+test('plaza tile rows keep two rows and scroll instead of clipping', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'plaza', exact: true }).click();
   const choices = page.getByTestId('plaza-center-choices');
-  const first = await choices.locator('button').nth(1).boundingBox();
-  const last = await choices.locator('button').last().boundingBox();
-  expect(first).not.toBeNull();
-  expect(last).not.toBeNull();
-  expect(last!.y).toBeGreaterThan(first!.y);
+  const first = (await choices.locator('button').first().boundingBox())!;
+  const viewport = (await choices.boundingBox())!;
+  expect(viewport.height).toBeLessThanOrEqual(first.height * 2 + 6);
   await choices.evaluate((element) => { element.scrollTop = element.scrollHeight; });
-  const viewport = await choices.boundingBox();
-  const visibleLast = await choices.locator('button').last().boundingBox();
-  expect(visibleLast!.x + visibleLast!.width).toBeLessThanOrEqual(viewport!.x + viewport!.width);
-  expect(visibleLast!.y + visibleLast!.height).toBeLessThanOrEqual(viewport!.y + viewport!.height + 1);
+  const last = (await choices.locator('button').last().boundingBox())!;
+  expect(last.x + last.width).toBeLessThanOrEqual(viewport.x + viewport.width);
+  expect(last.y + last.height).toBeLessThanOrEqual(viewport.y + viewport.height + 1);
+  await expect(page.getByTestId('plaza-center-placement').locator('button svg'))
+    .toHaveCount(3);
+  await expect(page.getByTestId('plaza-arrangement-placement').locator('button svg'))
+    .toHaveCount(2);
 });
 
-test('plaza fence sits left and the surface selector follows geometry', async ({ page }) => {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'plaza', exact: true }).click();
-  const leftSelectors = await rect(page, 'plaza-asset-selectors');
-  const centerAssets = await rect(page, 'plaza-center-choices');
-  const surfaceAssets = await rect(page, 'plaza-surface-choices');
-  const fenceAssets = await rect(page, 'plaza-fence-choices');
-  const settingsPanel = page.getByTestId('path-settings');
-  const settings = await rect(page, 'path-settings');
-  const centerTile = await page.getByTestId('plaza-center-choices')
-    .locator('button').first().boundingBox();
-  const surfaceTile = await page.getByTestId('plaza-surface-choices')
-    .locator('button').first().boundingBox();
-  const centerMode = page.getByTestId('plaza-center-placement');
-  const arrangementMode = page.getByTestId('plaza-arrangement-placement');
-  const arrangementModeBox = await arrangementMode.boundingBox();
-  const centerSpacing = await page.getByRole('slider', {
-    name: 'Abstand der Mittelobjekte' }).boundingBox();
-
-  expect(leftSelectors.x + leftSelectors.width).toBeLessThanOrEqual(settings.x);
-  expect(centerAssets.x).toBeLessThan(settings.x);
-  expect(fenceAssets.x).toBeLessThan(settings.x);
-  expect(surfaceAssets.x).toBeGreaterThanOrEqual(settings.x);
-  await expect(page.getByTestId('plaza-asset-selectors')
-    .getByTestId('plaza-fence-group')).toBeVisible();
-  await expect(settingsPanel.getByTestId('plaza-surface-group')).toBeVisible();
-  expect(await settingsPanel.getByTestId('plaza-surface-group').count()).toBe(1);
-  expect(centerTile?.width).toBeCloseTo(48, 0);
-  expect(centerTile?.height).toBeCloseTo(48, 0);
-  expect(surfaceTile?.width).toBeCloseTo(48, 0);
-  expect(surfaceTile?.height).toBeCloseTo(48, 0);
-  const fenceTile = await page.getByTestId('plaza-fence-choices')
-    .locator('button').first().boundingBox();
-  expect(fenceTile?.width).toBeCloseTo(48, 0);
-  expect(fenceTile?.height).toBeCloseTo(48, 0);
-  await expect(page.getByRole('button', { name: 'Mock Center 2', exact: true }))
-    .toBeVisible();
-  await expect(page.getByRole('button', { name: 'Zaun 1', exact: true }))
-    .toBeVisible();
-  expect(await page.getByTestId('plaza-asset-selectors').locator('svg').count()).toBe(0);
-  expect(await settingsPanel.locator('svg').count()).toBe(5);
-  const backIcon = page.getByRole('button', { name: 'Umriss bearbeiten' })
-    .locator('img');
-  await expect(backIcon).toHaveCount(1);
-  await expect(backIcon).toHaveCSS('transform', 'matrix(-1, 0, 0, -1, 0, 0)');
-  expect(arrangementModeBox!.y).toBeGreaterThanOrEqual(
-    centerSpacing!.y + centerSpacing!.height);
-  expect(await centerMode.locator('button svg').count()).toBe(3);
-  expect(await arrangementMode.locator('button svg').count()).toBe(2);
-  await page.screenshot({ path: 'test-results/plaza-layout.png' });
-});
-
-test('park and plaza surface selectors share the Plaza layout without info badges', async ({ page }) => {
+test('park and plaza surface tiles share one size', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'paths', exact: true }).click();
-
   const parkSurface = page.getByTestId('park-surface-choices');
-  const parkHeader = page.getByTestId('park-surface-group-header');
-  const pathSettings = page.getByTestId('path-settings');
-  const parkPathTypeBox = await pathSettings.getByTestId('path-width-selector').boundingBox();
-  const parkDividerBox = await pathSettings.getByTestId('path-surface-divider').boundingBox();
-  const parkSurfaceGroupBox = await page.getByTestId('park-surface-group').boundingBox();
-  await expect(parkSurface).toBeVisible();
-  await expect(pathSettings.getByTestId('path-surface-divider'))
-    .toHaveAttribute('role', 'separator');
   await expect(parkSurface.locator('button')).toHaveCount(11);
-  await expect(parkHeader.locator('span')).toHaveCount(0);
-  await expect(page.getByTestId('park-asset-selectors')).toHaveCount(0);
-  expect(parkDividerBox!.y).toBeGreaterThanOrEqual(
-    parkPathTypeBox!.y + parkPathTypeBox!.height);
-  expect(parkSurfaceGroupBox!.y).toBeGreaterThanOrEqual(
-    parkDividerBox!.y + parkDividerBox!.height);
-  expect(parkSurfaceGroupBox!.x).toBeGreaterThanOrEqual(
-    (await pathSettings.boundingBox())!.x);
-  const parkTile = await parkSurface.locator('button').first().boundingBox();
-  const parkGap = await parkSurface.evaluate((element) => getComputedStyle(element).gap);
-  expect(parkTile?.width).toBeCloseTo(48, 0);
-  expect(parkTile?.height).toBeCloseTo(48, 0);
+  const parkTile = (await parkSurface.locator('button').first().boundingBox())!;
+  const selected = parkSurface.getByRole('button', { name: 'Gras 2', exact: true });
+  await selected.click();
+  await expect(selected).toHaveAttribute('aria-pressed', 'true');
 
-  const selectedSurface = parkSurface.getByRole('button', { name: 'Gras 1', exact: true });
-  await selectedSurface.click();
-  await expect(selectedSurface).toHaveAttribute('aria-pressed', 'true');
-
-  await page.getByRole('button', { name: 'plaza', exact: true }).click();
+  await page.getByTestId('site-type-selector')
+    .getByRole('button', { name: 'Plaza', exact: true }).click();
   const plazaSurface = page.getByTestId('plaza-surface-choices');
-  const plazaHeader = page.getByTestId('plaza-surface-group-header');
-  await expect(plazaSurface).toBeVisible();
-  await expect(plazaHeader.locator('span')).toHaveCount(0);
-  await expect(page.getByTestId('plaza-center-header').locator('span'))
-    .toHaveCount(0);
-  const plazaTile = await plazaSurface.locator('button').first().boundingBox();
-  const plazaGap = await plazaSurface.evaluate((element) => getComputedStyle(element).gap);
-  expect(plazaTile?.width).toBeCloseTo(parkTile!.width, 0);
-  expect(plazaTile?.height).toBeCloseTo(parkTile!.height, 0);
-  expect(plazaGap).toBe(parkGap);
-  await expect(plazaSurface.getByRole('button', { name: 'Gras 1', exact: true }))
+  const plazaTile = (await plazaSurface.locator('button').first().boundingBox())!;
+  expect(plazaTile.width).toBeCloseTo(parkTile.width, 0);
+  expect(plazaTile.height).toBeCloseTo(parkTile.height, 0);
+  await expect(plazaSurface.getByRole('button', { name: 'Gras 2', exact: true }))
     .toHaveAttribute('aria-pressed', 'true');
 });
 
@@ -546,55 +374,24 @@ test('plaza placement rules replan deterministically and optionally add a fence'
   const summary = page.getByTestId('live-plan-summary');
   await expect(summary).toContainText('Plaza-Regeln');
 
+  const centerSpacing = page.getByTestId('plaza-centerpiece-spacing').getByRole('slider');
+  await expect(centerSpacing).toBeDisabled();
   const centerAxis = page.getByRole('button', { name: '3 auf Achse' });
   await centerAxis.click();
   await expect(centerAxis).toHaveAttribute('aria-pressed', 'true');
-  const centerSpacing = page.getByRole('slider', { name: 'Abstand der Mittelobjekte' });
-  expect(await centerSpacing.isDisabled()).toBe(false);
+  await expect(centerSpacing).toBeEnabled();
 
   await page.getByRole('button', { name: 'Am Rand entlang' }).click();
-  const edgeSpacing = page.getByRole('slider', { name: 'Abstand zum Rand' });
-  const sliderBox = await edgeSpacing.boundingBox();
-  expect(sliderBox).not.toBeNull();
-  await page.mouse.click(sliderBox!.x + sliderBox!.width * 0.35,
-    sliderBox!.y + sliderBox!.height / 2);
+  const edgeSpacing = page.getByRole('slider', { name: 'Zum Rand' });
+  const sliderBox = (await edgeSpacing.boundingBox())!;
+  await page.mouse.click(sliderBox.x + sliderBox.width * 0.35,
+    sliderBox.y + sliderBox.height / 2);
   expect(Number(await edgeSpacing.getAttribute('aria-valuenow'))).toBeGreaterThan(0);
 
   const fenceChoices = page.getByTestId('plaza-fence-choices');
-  await expect(fenceChoices).toBeVisible();
   await expect(fenceChoices.locator('button')).toHaveCount(16);
-  const settingsSpacing = await page.getByTestId('path-settings').evaluate((element) => {
-    const children = Array.from(element.children) as HTMLElement[];
-    return {
-      gap: getComputedStyle(element).rowGap,
-      margins: children.map((child) => getComputedStyle(child).marginBottom),
-    };
-  });
-  expect(settingsSpacing.gap).toBe('0px');
-  expect(new Set(settingsSpacing.margins.slice(0, -1)).size).toBe(1);
-  expect(settingsSpacing.margins[0]).not.toBe('0px');
-  expect(settingsSpacing.margins.at(-1)).toBe('0px');
-  const dividers = page.locator('[data-testid$="-divider"]');
-  await expect(dividers).toHaveCount(3);
-  for (const divider of await dividers.all()) {
-    await expect(divider).toBeVisible();
-    const dividerSpacing = await divider.evaluate((element) => {
-      const dividerStyle = getComputedStyle(element);
-      const dividerBox = element.getBoundingClientRect();
-      const nextBox = element.nextElementSibling!.getBoundingClientRect();
-      return {
-        height: dividerBox.height,
-        marginBottom: parseFloat(dividerStyle.marginBottom),
-        gapBelow: nextBox.top - dividerBox.bottom,
-      };
-    });
-    expect(dividerSpacing.height).toBeGreaterThan(0);
-    expect(dividerSpacing.marginBottom).toBeGreaterThan(0);
-    expect(dividerSpacing.gapBelow).toBeCloseTo(dividerSpacing.marginBottom, 1);
-  }
   const noFence = fenceChoices.getByRole('button', { name: 'Kein Zaun', exact: true });
   await expect(noFence).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('button', { name: 'Randzaun hinzufügen' })).toHaveCount(0);
   const fenceType = fenceChoices.getByRole('button', { name: 'Zaun 2', exact: true });
   await fenceType.click();
   await expect(fenceType).toHaveAttribute('aria-pressed', 'true');
@@ -607,54 +404,19 @@ test('plaza placement rules replan deterministically and optionally add a fence'
   await expect(summary).toContainText('0 Zaunläufe');
 });
 
-test('plaza detail panes have equal constrained height and one-line density', async ({ page }) => {
+test('plaza arrangement window shows equal slot and picker panes', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'plaza', exact: true }).click();
-  await page.getByTestId('panel-footer').locator('button').last().click();
-  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '2');
+  await page.getByTestId('plaza-arrangement-edit').click();
   const slots = await rect(page, 'plaza-arrangement-slots');
   const picker = await rect(page, 'plaza-arrangement-picker');
-  const footer = await rect(page, 'panel-footer');
+  const window = await rect(page, 'asset-window');
   expect(Math.abs(slots.height - picker.height)).toBeLessThan(2);
-  expect(Math.abs(slots.width - picker.width)).toBeLessThan(2);
-  expect(footer.y - (picker.y + picker.height)).toBeGreaterThanOrEqual(8);
-  const density = page.locator('[role="slider"] + strong');
-  expect(await density.textContent()).toMatch(/^\d+%$/);
-  expect((await density.boundingBox())!.height).toBeLessThan(30);
-});
-
-test('Plaza detail header has no extra height while panes and density stay aligned', async ({ page }) => {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'decorated', exact: true }).click();
-  await page.getByRole('button', { name: 'Weiter zur Ausstattung' }).click();
-  const parkBody = await rect(page, 'panel-body');
-  const parkHeader = await rect(page, 'asset-header');
-  const parkWorkspace = await rect(page, 'asset-workspace');
-  const parkGrid = await rect(page, 'asset-grid');
-  const parkChooser = await rect(page, 'asset-chooser');
-  const parkDensity = await page.getByRole('slider').first()
-    .evaluate((element) => element.parentElement!.getBoundingClientRect().toJSON());
-
-  await page.getByRole('button', { name: 'plaza', exact: true }).click();
-  await page.getByTestId('panel-footer').locator('button').last().click();
-  await expect(page.getByTestId('panel-body')).toHaveAttribute('data-stage', '2');
-  const plazaBody = await rect(page, 'panel-body');
-  const plazaHeader = await rect(page, 'asset-header');
-  const plazaWorkspace = await rect(page, 'plaza-arrangement-workspace');
-  const plazaSlots = await rect(page, 'plaza-arrangement-slots');
-  const plazaPicker = await rect(page, 'plaza-arrangement-picker');
-  const plazaDensity = await rect(page, 'plaza-density-settings');
-  const plazaHeaderGap = plazaWorkspace.y - (plazaHeader.y + plazaHeader.height);
-
-  expect(Math.abs(parkBody.height - plazaBody.height)).toBeLessThanOrEqual(10);
-  expect(plazaHeader.height).toBeLessThan(parkHeader.height - 20);
-  expect(plazaHeaderGap).toBeCloseTo(10, 0);
-  expect(Math.abs(parkWorkspace.height - plazaWorkspace.height)).toBeLessThan(2);
-  expect(Math.abs(parkGrid.height - parkChooser.height)).toBeLessThan(2);
-  expect(Math.abs(plazaSlots.height - plazaPicker.height)).toBeLessThan(2);
-  expect(Math.abs(parkGrid.width - parkChooser.width)).toBeLessThan(2);
-  expect(Math.abs(plazaSlots.width - plazaPicker.width)).toBeLessThan(2);
-  expect(Math.abs(parkDensity!.height - plazaDensity.height)).toBeLessThan(2);
+  expect(slots.y).toBeGreaterThan(window.y);
+  expect(picker.y + picker.height).toBeLessThanOrEqual(window.y + window.height);
+  await page.getByTestId('site-type-selector')
+    .getByRole('button', { name: 'Park', exact: true }).click();
+  await expect(page.getByTestId('asset-window')).toHaveCount(0);
 });
 
 test('park lake toggle switches the planned lake and is hidden for plazas', async ({ page }) => {
@@ -662,14 +424,26 @@ test('park lake toggle switches the planned lake and is hidden for plazas', asyn
   await page.getByRole('button', { name: 'paths', exact: true }).click();
   const lake = page.getByTestId('lake-selector');
   await expect(lake).toBeVisible();
-  const on = lake.getByRole('button', { name: 'An', exact: true });
-  const off = lake.getByRole('button', { name: 'Aus', exact: true });
-  await expect(on).toHaveAttribute('aria-pressed', 'true');
-  await off.click();
-  await expect(off).toHaveAttribute('aria-pressed', 'true');
-  await expect(on).toHaveAttribute('aria-pressed', 'false');
-  await on.click();
-  await expect(on).toHaveAttribute('aria-pressed', 'true');
+  await expect(lake).toHaveText('✓See');
+  await expect(lake).toHaveAttribute('aria-pressed', 'true');
+  // The lake sits as a checkbox chip in the planting chip row.
+  const tree = (await page.getByTestId('chip-tree').boundingBox())!;
+  const lakeBox = (await lake.boundingBox())!;
+  expect(Math.abs(lakeBox.height - tree.height)).toBeLessThan(1);
+  await lake.click();
+  await expect(lake).toHaveAttribute('aria-pressed', 'false');
+  await expect(lake).toHaveText('See');
+  await lake.click();
+  await expect(lake).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'plaza', exact: true }).click();
   await expect(page.getByTestId('lake-selector')).toHaveCount(0);
+});
+
+test('the UI draws symbols as icons, not font glyphs Cohtml lacks', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'plaza', exact: true }).click();
+  await page.getByTestId('plaza-arrangement-edit').click();
+  const text = await page.locator('body').innerText();
+  expect(text).not.toMatch(/[↻▲▼←→✦]/);
+  await expect(page.getByTestId('paths-variant').locator('svg')).toHaveCount(1);
 });

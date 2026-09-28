@@ -8,7 +8,6 @@ export const pointCount$ = bindValue<number>(MOD, "PointCount", 0);
 export const polygonArea$ = bindValue<number>(MOD, "PolygonArea", 0);
 export const polygonClosed$ = bindValue<boolean>(MOD, "PolygonClosed", false);
 export const polygonValid$ = bindValue<boolean>(MOD, "PolygonValid", false);
-export const status$ = bindValue<string>(MOD, "Status", "");
 export const plannerMode$ = bindValue<boolean>(MOD, "PlannerMode", false);
 export const entranceCount$ = bindValue<number>(MOD, "EntranceCount", 0);
 export const pathPlanReady$ = bindValue<boolean>(MOD, "PathPlanReady", false);
@@ -18,7 +17,7 @@ export const pathBuildSummary$ = bindValue<string>(MOD, "PathBuildSummary", "");
 export type PathBuildStatus = "ok" | "warning" | "error";
 export const pathBuildStatus$ = bindValue<PathBuildStatus>(MOD, "PathBuildStatus", "ok");
 export const pathType$ = bindValue<number>(MOD, "PathType", 1);
-export const siteType$ = bindValue<number>(MOD, "SiteType", 0);
+export const siteType$ = bindValue<number>(MOD, "SiteType", 0);
 export const lakeEnabled$ = bindValue<boolean>(MOD, "LakeEnabled", true);
 export const plazaCenterPlacement$ = bindValue<number>(MOD, "PlazaCenterPlacement", 0);
 export const plazaArrangementPlacement$ = bindValue<number>(MOD, "PlazaArrangementPlacement", 0);
@@ -45,7 +44,7 @@ export const setPlannerMode = (enabled: boolean) => trigger(MOD, "SetPlannerMode
 export const generatePaths = () => trigger(MOD, "GeneratePaths");
 export const buildPark = () => trigger(MOD, "BuildPark");
 export const setPathType = (type: number) => trigger(MOD, "SetPathType", type);
-export const setSiteType = (type: number) => trigger(MOD, "SetSiteType", type);
+export const setSiteType = (type: number) => trigger(MOD, "SetSiteType", type);
 export const setLakeEnabled = (enabled: boolean) => trigger(MOD, "SetLakeEnabled", enabled);
 export const setPlazaCenterPlacement = (value: number) =>
   trigger(MOD, "SetPlazaCenterPlacement", value);

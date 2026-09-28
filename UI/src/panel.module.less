@@ -1,162 +1,122 @@
+// Tones tie each group of the bar to its preview on the map.
 @outline: #f0ad3e;
 @paths: #4fc3f7;
 @assets: #7cd455;
 @danger: #e97868;
-@surface: rgba(12, 20, 35, 0.72);
-@surfaceStrong: rgba(12, 20, 35, 0.92);
-// Shared outer inset: match the established spacing of the panel header.
-@panelInset: 10rem;
-@panelGap: 10rem;
-// UI styling ruleset: 10rem panel inset/gap; 184rem settings labels; 40rem
-// controls; 220rem asset panes. Park and Plaza share these primitives, while
-// stage-specific content may add rows but must not redefine their geometry.
-@settingLabelWidth: 184rem;
-@settingControlHeight: 40rem;
-@assetPaneHeight: 220rem;
-@assetPaneRadius: 7rem;
+// Yellow marks every "roll again" action (new variant, rearrange).
+@reroll: #e8c547;
+@pane: rgba(255, 255, 255, 0.035);
+@selected: rgba(83, 190, 239, 0.34);
+@control: rgba(10, 19, 31, 0.72);
+// UI ruleset: 8rem inset and gap, 28rem controls, 78rem setting labels.
+// Gameface lays out with Yoga/Flexbox only: no CSS Grid, and `gap` plus
+// `justify-content` instead of auto margins.
+@inset: 8rem;
+@gap: 8rem;
+@rowGap: 6rem;
+@controlHeight: 28rem;
+@labelWidth: 64rem;
+@radius: 5rem;
 
-.panel {
+/* ------------------------------------------------------------ shell */
+
+// Holds the bar and the optional window below it; never catches map clicks.
+.shell {
   position: absolute;
-  display: flex;
-  flex-direction: column;
-  top: 18rem;
+  top: 12rem;
   left: 50%;
   z-index: 50;
-  width: 1320rem;
-  max-width: 94%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 1240rem;
+  max-width: 96%;
   transform: translateX(-50%);
+  font-family: var(--fontFamily);
+  pointer-events: none;
+}
+
+.bar,
+.window {
   box-sizing: border-box;
   overflow: hidden;
-  border-radius: 10rem;
+  border-radius: 8rem;
   color: var(--menuText1Normal);
   background-color: var(--panelColorNormal);
   backdrop-filter: var(--panelBlur);
-  font-family: var(--fontFamily);
   pointer-events: auto;
 }
 
-.panelHeader {
+.bar {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* ------------------------------------------------------------- head */
+
+.head {
   display: flex;
   align-items: center;
-  min-height: 56rem;
-  padding: 7rem @panelInset;
+  gap: @gap;
+  min-height: 40rem;
+  padding: 5rem @inset;
   box-sizing: border-box;
   border-bottom: 1rem solid var(--menuBorderColor1);
-  background-color: @surface;
+  background-color: rgba(12, 20, 35, 0.72);
 }
 
 .brand {
   display: flex;
   align-items: center;
-  flex: 0 0 180rem;
-  color: var(--menuText1Normal);
+  flex: 0 0 auto;
+  gap: 7rem;
+  margin-right: 4rem;
   font-size: var(--fontSizeS);
   font-weight: bold;
+  white-space: nowrap;
 }
 
-.brandMark {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30rem;
-  height: 30rem;
-  margin-right: 9rem;
-  border-radius: 6rem;
-  color: #13202a;
-  background-color: @assets;
-  font-size: 19rem;
-}
-
-.brandMark img {
-  width: 27rem;
-  height: 28rem;
+.brand img {
+  width: 24rem;
+  height: 24rem;
   object-fit: contain;
 }
 
-.progress {
-  display: flex;
-  align-items: center;
+.headStatus {
   flex: 1 1 auto;
   min-width: 0;
-  gap: 4rem;
-}
-
-.progressStep {
-  display: flex;
-  align-items: center;
-  flex: 1 1 0;
-  min-width: 0;
-  height: 34rem;
-  margin-right: 0;
-  padding: 0 8rem;
-  box-sizing: border-box;
-  border-bottom: 2rem solid transparent;
-  border-top: 0;
-  border-right: 0;
-  border-left: 0;
-  border-radius: 5rem;
+  overflow: hidden;
   color: var(--menuText2Normal);
-  background-color: rgba(255, 255, 255, 0.035);
   font-size: var(--fontSizeXS);
-  font-family: var(--fontFamily);
-  text-align: left;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: default;
 }
 
-.progressStepActive {
-  border-bottom-color: @paths;
-  color: white;
-  background-color: var(--menuActiveColor);
-}
-
-.progressStepDone {
-  color: var(--menuText1Normal);
-}
-
-.progressNumber {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 21rem;
-  width: 21rem;
-  height: 21rem;
-  margin-right: 6rem;
-  border-radius: 11rem;
-  color: #152230;
-  background-color: rgba(255, 255, 255, 0.52);
-  font-size: 11rem;
+.headStatusWarning {
+  padding: 4rem 8rem;
+  border-left: 3rem solid #e6b657;
+  border-radius: 3rem;
+  color: #fff4d9;
+  background-color: rgba(92, 68, 27, 0.55);
   font-weight: bold;
-}
-
-.progressStepActive .progressNumber { background-color: @paths; }
-.progressStepDone .progressNumber { background-color: @assets; }
-
-.toolSlot {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex: 0 0 330rem;
-  min-height: 36rem;
-  margin-left: 10rem;
 }
 
 .snapRow {
   display: flex;
   align-items: center;
-}
-
-.snapLabel {
-  margin-right: 7rem;
-  color: var(--menuText2Normal);
-  font-size: var(--fontSizeXS);
-  font-weight: bold;
-  letter-spacing: 1rem;
+  flex: 0 0 auto;
+  gap: 2rem;
 }
 
 .iconButton,
 .closeButton {
-  border: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border: 1rem solid transparent;
+  border-radius: @radius;
   color: var(--menuText2Normal);
   background-color: transparent;
   font-family: var(--fontFamily);
@@ -164,22 +124,13 @@
 }
 
 .iconButton {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32rem;
-  height: 32rem;
-  margin-right: 3rem;
-  padding: 5rem;
-  border: 1rem solid transparent;
-  border-radius: 5rem;
+  width: @controlHeight;
+  height: @controlHeight;
+  padding: 4rem;
   opacity: 0.48;
 }
 
-.iconButton img { width: 21rem; height: 21rem; }
-
-.iconButton:hover,
-.closeButton:hover { background-color: var(--menuHoverColor); }
+.iconButton img { width: 18rem; height: 18rem; }
 
 .iconButtonActive {
   border-color: @outline;
@@ -188,720 +139,188 @@
 }
 
 .closeButton {
-  flex: 0 0 34rem;
-  width: 34rem;
-  height: 34rem;
-  margin-left: 8rem;
-  border-radius: 5rem;
-  font-size: 25rem;
-  line-height: 30rem;
+  width: 30rem;
+  height: 30rem;
+  font-size: 22rem;
+  line-height: 26rem;
 }
 
-.panelBody {
+.iconButton:hover,
+.closeButton:hover { background-color: var(--menuHoverColor); }
+
+/* ---------------------------------------------------------- columns */
+
+.columns {
   display: flex;
-  min-height: 340rem;
-  padding: @panelInset;
+  align-items: stretch;
+  gap: @gap;
+  padding: @inset;
   box-sizing: border-box;
 }
 
-/* Keep the three compact workflow steps identical, with room for path options. */
-.compactBody {
-  min-height: 170rem;
-}
-
-.plazaBody { min-height: 270rem; }
-
-.compactBody .stageColumn {
-  padding-bottom: 0;
-}
-
-.compactBody .stageCopy p { margin-bottom: 5rem; }
-.compactBody .statePill { min-height: 22rem; padding-top: 2rem; padding-bottom: 2rem; }
-
-.stageColumn.pathStageColumn {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: @panelGap;
-}
-
-.pathStageColumn .stageCopy {
-  flex: 1 1 0;
-  align-self: stretch;
-  justify-content: space-between;
-}
-
-.pathStageIntro {
+.column {
   display: flex;
   flex-direction: column;
-  min-width: 0;
-}
-
-.pathSettings {
-  display: flex;
-  flex-direction: column;
-  gap: @panelGap;
   flex: 1 1 0;
   min-width: 0;
-  align-self: flex-start;
-}
-
-.plazaPathSettings {
-  gap: 0;
-}
-
-.plazaPathSettings > * {
-  margin-bottom: @panelGap;
-}
-
-.plazaPathSettings > :last-child {
-  margin-bottom: 0;
-}
-
-.plazaPathSettings > .compactSetting:first-child .segmentedControl button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: @settingControlHeight;
-  white-space: nowrap;
-}
-
-.plazaPathSettings > [data-testid="plaza-center-placement"],
-.plazaPathSettings > [data-testid="plaza-arrangement-placement"] {
-  margin-top: 0;
-}
-
-.plazaRuleSegments {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.plazaRuleSegments button {
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 0 5rem;
-  white-space: normal;
-}
-
-.plazaPathSettings .plazaRuleSegments button {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 46rem;
-  min-height: 46rem;
-  gap: 3rem;
-  padding: 3rem 5rem;
-  line-height: 1.15;
-  white-space: normal;
-}
-
-.plazaRuleSegments svg {
-  display: block;
-  flex: 0 0 17rem;
-  width: 17rem;
-  height: 17rem;
-}
-
-.plazaAssetSelectors {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  flex: 1 1 auto;
-  min-width: 0;
-  gap: @panelGap;
-  margin-top: 8rem;
-}
-
-.plazaAssetGroup {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  gap: @panelGap;
-  padding: 10rem;
+  padding: 6rem @inset @inset;
   box-sizing: border-box;
-  border: 1rem solid var(--menuBorderColor1);
-  border-radius: @assetPaneRadius;
-  background-color: rgba(10, 19, 31, 0.24);
+  border-top: 2rem solid var(--menuBorderColor1);
+  border-radius: @radius;
+  background-color: rgba(255, 255, 255, 0.035);
 }
 
-.plazaPathSettings > [data-testid="plaza-fence-group"] {
-  margin-top: 0;
-}
+.toneBlue { border-top-color: @paths; }
+.toneGreen { border-top-color: @assets; }
+.toneAmber { border-top-color: @outline; }
 
-.settingsDivider,
-.plazaSettingsDivider {
-  align-self: stretch;
-  flex: 0 0 1rem;
-  height: 1rem;
-  background-color: var(--menuBorderColor1);
-}
-
-.plazaAssetGroupHeader {
-  display: flex;
-  align-items: center;
-  min-height: 24rem;
-  gap: @panelGap;
-  color: var(--menuText1Normal);
-}
-
-.plazaAssetGroupHeader strong {
-  font-size: var(--fontSizeS);
-}
-
-.plazaAssetGroup .plazaCenterChoices {
-  flex: 0 0 auto;
-  height: 100rem;
-  max-height: 100rem;
-  gap: 4rem;
-}
-
-.plazaAssetGroup .plazaCenterChoice {
-  flex: 0 0 48rem;
-  height: 48rem;
-  padding: 1rem;
-}
-
-.plazaAssetGroup .surfaceChoices {
-  flex: 0 0 auto;
-  min-height: 0;
-  max-height: 100rem;
-  gap: 4rem;
-}
-
-.plazaAssetGroup .surfaceChoices button {
-  flex: 0 0 48rem;
-  height: 48rem;
-  padding: 1rem;
-}
-
-.plazaPathSettings .densityControl {
-  min-height: @settingControlHeight;
-  flex: 0 0 @settingControlHeight;
-  padding: 0 10rem;
-  gap: @panelGap;
-  font-weight: normal;
-}
-
-.plazaPathSettings .densityControl > span {
-  display: flex;
-  align-items: center;
-  flex: 0 0 @settingLabelWidth;
-  min-width: @settingLabelWidth;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.plazaPathSettings .densityControl strong {
-  flex-basis: 64rem;
-  width: 64rem;
-  min-width: 64rem;
-  font-weight: normal;
-}
-
-.compactSetting {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  min-height: @settingControlHeight;
-  color: var(--menuText2Normal);
-  font-size: var(--fontSizeXS);
-}
-
-.compactSetting > span {
-  display: flex;
-  align-items: center;
-  flex: 0 0 @settingLabelWidth;
-  min-width: @settingLabelWidth;
-  margin-right: @panelGap;
-  text-align: left;
-}
-
-// The park lake switch lives in the free space of the info column, so the
-// path step keeps its height and does not cover more of the map.
-.lakeSetting {
-  max-width: 420rem;
-  margin-top: @panelGap;
-}
-
-.compactSetting .segmentedControl {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.compactSetting .segmentedControl button {
-  flex: 1 1 50%;
-  min-width: 0;
-  height: @settingControlHeight;
-}
-
-.surfaceChoices {
-  display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 32rem;
-  max-height: 74rem;
-  gap: @panelGap;
-  overflow-x: hidden;
-  overflow-y: auto;
-}
-
-.surfaceChoices button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 40rem;
-  height: 32rem;
-  padding: 3rem;
-  overflow: hidden;
-  box-sizing: border-box;
-  border: 1rem solid var(--menuBorderColor1);
-  border-radius: 4rem;
-  background-color: rgba(10, 19, 31, 0.72);
-}
-
-.surfaceChoices button:hover:not(:disabled) { background-color: var(--menuHoverColor); }
-.surfaceChoices img { max-width: 100%; max-height: 100%; object-fit: contain; }
-.surfaceChoices .surfaceChoiceActive {
-  border-color: @paths;
-  background-color: rgba(79, 195, 247, 0.24);
-}
-
-.plazaCenterSetting { min-height: 50rem; align-items: flex-start; }
-
-.plazaCenterChoices {
-  display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  align-items: flex-start;
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 50rem;
-  max-height: 50rem;
-  gap: 6rem;
-  overflow-x: hidden;
-  overflow-y: auto;
-}
-
-.plazaCenterChoice {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 40rem;
-  min-width: 0;
-  height: 44rem;
-  padding: 3rem;
-  overflow: hidden;
-  box-sizing: border-box;
-  border: 1rem solid var(--menuBorderColor1);
-  border-radius: 4rem;
-  color: var(--menuText2Normal);
-  background-color: rgba(10, 19, 31, 0.72);
-  font-size: var(--fontSizeXS);
-  text-align: left;
-}
-
-.plazaCenterChoice:hover:not(:disabled) { background-color: var(--menuHoverColor); }
-.plazaCenterChoice img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.plazaCenterFallback {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40rem;
-  height: 40rem;
-  border-radius: 4rem;
-  color: @assets;
-  background-color: rgba(255, 255, 255, 0.08);
-  font-size: 18rem;
-  font-weight: bold;
-}
-
-.plazaCenterChoiceActive {
-  border-color: @assets;
-  color: var(--menuText1Normal);
-  background-color: rgba(124, 212, 85, 0.16);
-}
-
-.assetTooltip {
-  position: absolute;
-  z-index: 200;
-  max-width: 210rem;
-  padding: 4rem 7rem;
-  border: 1rem solid var(--menuBorderColor1);
-  border-radius: 4rem;
-  color: var(--menuText1Normal);
-  background-color: rgba(10, 19, 31, 0.96);
-  font-size: var(--fontSizeXS);
-  pointer-events: none;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.plazaCenterChoicesEmpty {
-  display: flex;
-  align-items: center;
-  flex: 0 0 560rem;
-  min-height: 32rem;
-  color: var(--menuText2Normal);
-  font-size: var(--fontSizeXS);
-}
-
-.stageColumn {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-.panelFooter {
+.columnHead {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: @panelGap;
-  min-height: 56rem;
-  padding: @panelInset;
-  box-sizing: border-box;
+  min-height: 22rem;
+  margin-bottom: @rowGap;
 }
 
-.footerLeft,
-.footerRight {
-  display: flex;
-  align-items: center;
-  gap: @panelGap;
-  min-height: 36rem;
-}
-
-.footerRight { justify-content: flex-end; }
-
-.panelFooter button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5rem;
-}
-
-.buttonIcon { width: 14rem; height: 14rem; flex: 0 0 14rem; }
-.backButtonIcon { transform: rotate(180deg); }
-.primaryButton .buttonIcon { filter: brightness(0); }
-
-.stageCopy {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.stageCopy p,
-.assetStageHeader p {
-  max-width: 650rem;
-  margin: 0 0 16rem;
-  color: var(--menuText2Normal);
-  font-size: var(--fontSizeXS);
-  line-height: 1.35;
-}
-
-.stageCopy .buildWarning {
-  max-width: 700rem;
-  padding: 7rem 10rem;
-  border-left: 3rem solid #e6b657;
-  border-radius: 3rem;
-  background: rgba(92, 68, 27, 0.55);
-  color: #fff4d9;
-  font-weight: bold;
-}
-
-.stateRow {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: @panelGap;
-}
-
-.pathTypeControl {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  align-self: flex-end;
-  width: 430rem;
-  margin-top: 14rem;
-  color: var(--menuText2Normal);
-  font-size: var(--fontSizeXS);
-}
-
-.pathTypeControl > span {
-  min-width: 92rem;
-  text-align: right;
-  margin-right: 10rem;
-}
-
-.segmentedControl {
-  display: flex;
+.columnTitle {
   overflow: hidden;
-  border: 1rem solid var(--menuBorderColor1);
-  border-radius: 5rem;
-}
-
-.segmentedControl button {
-  min-width: 128rem;
-  height: 32rem;
-  padding: 0 12rem;
-  border: 0;
-  color: var(--menuText2Normal);
-  background-color: rgba(10, 19, 31, 0.72);
   font-size: var(--fontSizeXS);
+  font-weight: bold;
+  letter-spacing: 1rem;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
-.segmentedControl button + button {
-  border-left: 1rem solid var(--menuBorderColor1);
-}
+.toneBlue .columnTitle { color: @paths; }
+.toneGreen .columnTitle { color: @assets; }
+.toneAmber .columnTitle { color: @outline; }
 
-.segmentedControl button:hover:not(:disabled) {
-  background-color: rgba(83, 190, 239, 0.18);
-}
-
-.segmentedControl .segmentActive {
-  color: var(--menuText1Normal);
-  background-color: rgba(83, 190, 239, 0.34);
-}
-
-.statePill {
+.headAction {
   display: flex;
   align-items: center;
-  min-height: 28rem;
-  margin-right: 0;
-  padding: 4rem 10rem;
-  box-sizing: border-box;
-  border: 1rem solid var(--menuBorderColor1);
-  border-radius: 15rem;
-  color: var(--menuText2Normal);
-  background-color: rgba(255, 255, 255, 0.04);
-  font-size: var(--fontSizeXS);
-}
-
-.statePillSuccess {
-  border-color: rgba(124, 212, 85, 0.48);
-  color: var(--menuText1Normal);
-  background-color: rgba(124, 212, 85, 0.10);
-}
-
-.stateCheck {
-  margin-right: 5rem;
-  color: @assets;
-  font-weight: bold;
-}
-
-.actionPanel,
-.managePanel {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  flex: 0 0 330rem;
-  padding: 24rem;
-  box-sizing: border-box;
-  border: 1rem solid var(--menuBorderColor1);
-  border-radius: 9rem;
-  background-color: rgba(12, 20, 35, 0.35);
-}
-
-.primaryButton,
-.secondaryButton,
-.tertiaryButton,
-.backButton,
-.dangerButton,
-.dangerLink,
-.successButton,
-.fenceToggle {
-  min-height: 36rem;
-  padding: 7rem 12rem;
-  box-sizing: border-box;
-  border-radius: 5rem;
+  gap: 4rem;
+  flex: 0 0 auto;
+  height: 22rem;
+  padding: 0 8rem;
+  border: 1rem solid @reroll;
+  border-radius: 11rem;
+  color: #fff6cf;
+  background-color: fade(@reroll, 26%);
   font-family: var(--fontFamily);
   font-size: var(--fontSizeXS);
-  font-weight: bold;
   white-space: nowrap;
   pointer-events: auto;
 }
 
-.primaryButton,
-.secondaryButton,
-.tertiaryButton,
-.dangerButton,
-.successButton {
-  width: 100%;
-  margin-top: 8rem;
-}
+.headAction:hover:not(:disabled) { background-color: fade(@reroll, 42%); }
+.headAction[disabled] { opacity: 0.4; }
 
-.backButton {
-  align-self: flex-start;
-  width: 170rem;
-  min-width: 170rem;
-  margin: 0;
-  border: 1rem solid var(--menuBorderColor1);
-  color: var(--menuText1Normal);
-  background-color: var(--menuActiveColor);
-}
-
-.primaryButton {
-  border: 1rem solid rgba(79, 195, 247, 0.75);
-  color: #10202a;
-  background-color: @paths;
-}
-
-.secondaryButton {
-  border: 1rem solid var(--menuBorderColor1);
-  color: var(--menuText1Normal);
-  background-color: var(--menuActiveColor);
-}
-
-.tertiaryButton,
-.dangerLink {
-  border: 0;
-  color: var(--menuText2Normal);
-  background-color: transparent;
-}
-
-.dangerButton {
-  border: 1rem solid rgba(233, 120, 104, 0.65);
-  color: white;
-  background-color: rgba(233, 120, 104, 0.22);
-}
-
-.successButton {
-  border: 1rem solid rgba(124, 212, 85, 0.72);
-  color: #10220f;
-  background-color: @assets;
-}
-
-.panelFooter .primaryButton,
-.panelFooter .secondaryButton,
-.panelFooter .dangerButton,
-.panelFooter .successButton {
-  width: 170rem;
-  min-width: 170rem;
-  margin: 0;
-}
-
-.primaryButton:hover,
-.secondaryButton:hover,
-.tertiaryButton:hover,
-.backButton:hover,
-.dangerButton:hover,
-.dangerLink:hover,
-.successButton:hover,
-.fenceToggle:hover { filter: brightness(1.14); }
-
-.primaryButton[disabled],
-.secondaryButton[disabled],
-.tertiaryButton[disabled],
-.backButton[disabled],
-.dangerButton[disabled],
-.dangerLink[disabled],
-.successButton[disabled],
-.fenceToggle[disabled],
-.assetTile[disabled],
-.assetChoiceTile[disabled] {
-  opacity: 0.35;
-  pointer-events: none;
-}
-
-.manageLabel {
-  margin-bottom: 6rem;
-  color: var(--menuText2Normal);
-  font-size: var(--fontSizeXS);
-  font-weight: bold;
-  text-transform: uppercase;
-}
-
-/* Gameface uses Yoga/Flexbox, not CSS Grid. Keep both columns in flow.
-   https://guide.coherent-labs.com/layout-assets-and-styling/laying-out-the-screen/ */
-.assetStage,
-.plazaArrangementStage {
+.columnBody {
   display: flex;
   flex-direction: column;
-  gap: @panelGap;
-  width: 100%;
+  gap: @rowGap;
   min-width: 0;
 }
 
-.assetBody { min-height: 330rem; }
-
-.assetStageTop {
-  display: flex;
-  flex-direction: row;
-  gap: @panelGap;
-  flex: 0 0 90rem;
-  min-height: 90rem;
-  min-width: 0;
-}
-
-.assetStageHeader {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-.assetStageHeader > div:first-child {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.assetStageHeader p { margin-bottom: 4rem; }
-
-.densitySettings {
-  display: flex;
-  flex-direction: column;
-  gap: @panelGap;
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-.densityControl {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  min-height: @settingControlHeight;
-  flex: 1 1 0;
-  gap: @panelGap;
-  padding: 5rem @panelInset;
-  box-sizing: border-box;
-  border: 1rem solid var(--menuBorderColor1);
-  border-radius: 5rem;
-  color: var(--menuText2Normal);
-  background-color: rgba(255, 255, 255, 0.04);
+.columnNotice {
+  padding: 4rem 8rem;
+  border-left: 3rem solid #e6b657;
+  border-radius: 3rem;
+  color: #fff4d9;
+  background-color: rgba(92, 68, 27, 0.55);
   font-size: var(--fontSizeXS);
-  font-weight: bold;
-  white-space: nowrap;
 }
 
-.densityControl > span {
+/* --------------------------------------------------- setting rows */
+
+.settingRow,
+.tileRow {
   display: flex;
   align-items: center;
-  flex: 0 0 @settingLabelWidth;
-  min-width: @settingLabelWidth;
+  gap: @gap;
+  min-width: 0;
+  min-height: @controlHeight;
+}
+
+.tileRow { align-items: flex-start; }
+
+.settingLabel {
+  flex: 0 0 @labelWidth;
+  width: @labelWidth;
   overflow: hidden;
+  color: var(--menuText2Normal);
+  font-size: var(--fontSizeXS);
+  line-height: @controlHeight;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.settingValue {
+  flex: 0 0 48rem;
+  width: 48rem;
+  color: var(--menuText1Normal);
+  font-size: var(--fontSizeXS);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.segmented {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  border: 1rem solid var(--menuBorderColor1);
+  border-radius: @radius;
+}
+
+// Header segments size to their text: a zero flex basis collapses them in Cohtml.
+.head .segmented { flex: 0 0 auto; }
+.head .segmented button { flex: 0 0 auto; min-width: 72rem; }
+
+.headSpacer { flex: 1 1 auto; min-width: 0; }
+
+.segmented button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 0;
+  gap: 5rem;
+  min-width: 0;
+  height: @controlHeight;
+  padding: 0 10rem;
+  border: 0;
+  color: var(--menuText2Normal);
+  background-color: @control;
+  font-family: var(--fontFamily);
+  font-size: var(--fontSizeXS);
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+.segmented button + button { border-left: 1rem solid var(--menuBorderColor1); }
+.segmented button:hover:not(:disabled) { background-color: rgba(83, 190, 239, 0.18); }
+.segmented button[disabled] { opacity: 0.45; }
+
+.segmented .segmentActive {
+  color: var(--menuText1Normal);
+  background-color: @selected;
+}
+
+.segmented svg {
+  display: block;
+  flex: 0 0 18rem;
+  width: 18rem;
+  height: 18rem;
+}
+
+/* ----------------------------------------------------------- slider */
 
 .densitySlider {
   position: relative;
   flex: 1 1 auto;
   min-width: 0;
-  height: 24rem;
+  height: 22rem;
   margin: 0;
   padding: 0;
   border: 0;
@@ -911,7 +330,7 @@
 
 .densityTrack {
   position: absolute;
-  top: 10rem;
+  top: 9rem;
   right: 3rem;
   left: 3rem;
   display: block;
@@ -937,243 +356,318 @@
   width: 15rem;
   height: 15rem;
   margin-left: -7rem;
+  box-sizing: border-box;
   border: 2rem solid #10220f;
   border-radius: 9rem;
-  box-sizing: border-box;
   background-color: @assets;
-}
-
-.densityControl strong {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex: 0 0 64rem;
-  width: 64rem;
-  min-width: 64rem;
-  color: var(--menuText1Normal);
-  text-align: right;
-  white-space: nowrap;
-  word-break: keep-all;
 }
 
 .densitySlider[disabled] { opacity: 0.35; pointer-events: none; }
-.densitySlider:focus-visible {
-  outline: 2rem solid @paths;
-  outline-offset: 2rem;
-}
+.densitySlider:focus-visible { outline: 2rem solid @paths; outline-offset: 2rem; }
 
-.fenceToggle {
-  display: flex;
-  align-items: center;
-  flex: 0 0 auto;
-  margin-left: 8rem;
-  justify-content: center;
-  flex: 1 1 50%;
-  border: 1rem solid var(--menuBorderColor1);
-  color: var(--menuText2Normal);
-  background-color: rgba(255, 255, 255, 0.04);
-}
+/* ------------------------------------------------------------ tiles */
 
-.fenceToggleActive {
-  border-color: rgba(124, 212, 85, 0.6);
-  color: var(--menuText1Normal);
-  background-color: rgba(124, 212, 85, 0.10);
-}
-
-.toggleTrack {
-  position: relative;
-  display: block;
-  width: 34rem;
-  height: 18rem;
-  margin-right: 8rem;
-  box-sizing: border-box;
-  border: 1rem solid rgba(255, 255, 255, 0.16);
-  border-radius: 9rem;
-  background-color: rgba(255, 255, 255, 0.18);
-}
-
-.toggleKnob {
-  position: absolute;
-  top: 1rem;
-  left: 1rem;
-  display: block;
-  width: 14rem;
-  height: 14rem;
-  margin-left: 0;
-  border-radius: 7rem;
-  background-color: var(--menuText2Normal);
-}
-
-.fenceToggleActive .toggleTrack { background-color: rgba(124, 212, 85, 0.38); }
-.fenceToggleActive .toggleKnob { left: 17rem; margin-left: 0; background-color: @assets; }
-
-.assetWorkspace {
-  display: flex;
-  flex-direction: row;
-  gap: @panelGap;
-  flex: 0 0 @assetPaneHeight;
-  height: @assetPaneHeight;
-  min-width: 0;
-  max-height: @assetPaneHeight;
-}
-
-.assetGrid,
-.assetChooser,
-.plazaArrangementSlots,
-.plazaArrangementPicker {
-  flex: 1 1 0;
-  width: auto;
-  min-width: 0;
-  height: @assetPaneHeight;
-  box-sizing: border-box;
-}
-
-.assetGrid {
+// Two rows at most; further tiles scroll inside the row.
+.tiles {
   display: flex;
   flex-wrap: wrap;
   align-content: flex-start;
-  align-items: flex-start;
-  gap: @panelGap;
-  height: @assetPaneHeight;
-  border: 1rem solid transparent;
-  overflow: hidden;
+  flex: 1 1 auto;
+  gap: 4rem;
+  min-width: 0;
+  max-height: 64rem;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
-.assetTile {
-  position: relative;
+.tile {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  flex: 0 0 31%;
-  width: 31%;
-  height: 105rem;
-  min-width: 0;
-  padding: 22rem 10rem 17rem;
+  flex: 0 0 30rem;
+  width: 30rem;
+  height: 30rem;
+  padding: 1rem;
   box-sizing: border-box;
   overflow: hidden;
   border: 1rem solid var(--menuBorderColor1);
-  border-radius: 6rem;
-  color: var(--menuText1Normal);
-  background-color: rgba(12, 20, 35, 0.54);
+  border-radius: 4rem;
+  color: var(--menuText2Normal);
+  background-color: @control;
   font-family: var(--fontFamily);
+  font-size: var(--fontSizeXS);
   pointer-events: auto;
 }
 
-.assetTile:hover { background-color: var(--menuHoverColor); }
-.assetTileDisabled .assetTileVisual,
-.assetTileDisabled .assetTileCount { opacity: 0.32; }
+.tile img { width: 100%; height: 100%; object-fit: contain; }
+.tile:hover:not(:disabled) { background-color: var(--menuHoverColor); }
+.tile[disabled] { opacity: 0.45; }
 
-.assetTileActive {
-  border-color: @assets;
-  background-color: rgba(124, 212, 85, 0.10);
-}
-
-.assetTileLabel {
-  position: absolute;
-  top: 9rem;
-  left: 10rem;
-  right: 10rem;
-  overflow: hidden;
+.tileActive {
+  border: 2rem solid @paths;
   color: var(--menuText1Normal);
-  font-size: var(--fontSizeXS);
-  font-weight: bold;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  background-color: rgba(79, 195, 247, 0.24);
 }
 
-.assetTileVisual {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 50rem;
-}
-
-.assetIcon { max-width: 54rem; max-height: 48rem; object-fit: contain; }
-
-.assetFallback,
-.assetChoiceFallback {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 42rem;
-  height: 42rem;
-  border-radius: 6rem;
+.tileFallback {
   color: @assets;
-  background-color: rgba(255, 255, 255, 0.08);
-  font-size: 18rem;
+  font-size: 14rem;
   font-weight: bold;
 }
 
-.assetTileCount {
-  position: absolute;
-  right: 6rem;
-  bottom: 8rem;
-  left: 10rem;
-  overflow: hidden;
-  color: var(--menuText2Normal);
-  font-size: 9rem;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* ------------------------------------------------------------ chips */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5rem;
+  min-width: 0;
 }
 
-.categoryCheck {
-  position: absolute;
-  right: 8rem;
-  bottom: 8rem;
-  z-index: 2;
-  width: 19rem;
-  height: 19rem;
+.chip,
+.arrangementPreview {
+  display: flex;
+  align-items: center;
+  height: @controlHeight;
+  box-sizing: border-box;
+  border: 1rem solid var(--menuBorderColor1);
+  border-radius: @radius;
+  background-color: @control;
+}
+
+.chipOpen { border-color: @paths; background-color: @selected; }
+.chipOff .chipIcon,
+.chipOff .chipLabel,
+.chipOff .chipCount { opacity: 0.4; }
+
+.chipCheck {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 16rem;
+  width: 16rem;
+  height: 16rem;
+  margin-left: 5rem;
   padding: 0;
   box-sizing: border-box;
-  border: 1rem solid rgba(255, 255, 255, 0.32);
-  border-radius: 4rem;
+  border: 1rem solid rgba(255, 255, 255, 0.36);
+  border-radius: 3rem;
   color: #10220f;
   background-color: rgba(5, 12, 20, 0.75);
   font-family: var(--fontFamily);
-  font-size: 13rem;
+  font-size: 11rem;
   font-weight: bold;
-  line-height: 17rem;
+  line-height: 1;
   pointer-events: auto;
 }
 
-.categoryCheckActive {
-  border-color: @assets;
-  background-color: @assets;
+.chipCheckOn { border-color: @assets; background-color: @assets; }
+
+.chipBody,
+.arrangementPreview {
+  gap: 5rem;
+  padding: 0 7rem 0 5rem;
+  color: var(--menuText1Normal);
+  font-family: var(--fontFamily);
+  font-size: var(--fontSizeXS);
+  white-space: nowrap;
+  pointer-events: auto;
 }
 
-.assetChooser,
-.plazaArrangementSlots,
-.plazaArrangementPicker {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1rem solid var(--menuBorderColor1);
-  border-radius: @assetPaneRadius;
-  background-color: @surfaceStrong;
-}
-
-.assetChooserHeader {
+.chipBody {
   display: flex;
   align-items: center;
-  flex: 0 0 34rem;
-  min-height: 34rem;
-  padding: 8rem 10rem;
+  height: 100%;
+  border: 0;
+  background-color: transparent;
+}
+
+.chipBody:hover,
+.arrangementPreview:hover { background-color: var(--menuHoverColor); }
+
+.chipIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 20rem;
+  width: 20rem;
+  height: 20rem;
+  color: @assets;
+  object-fit: contain;
+}
+
+.chipCount {
+  color: var(--menuText2Normal);
+}
+
+/* ---------------------------------------------------- action column */
+
+.actionColumn {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: 0 0 200rem;
+  gap: @rowGap;
+  padding: 6rem @inset @inset;
   box-sizing: border-box;
-  border-bottom: 1rem solid var(--menuBorderColor1);
-  background-color: rgba(255, 255, 255, 0.045);
+  border-top: 2rem solid var(--menuBorderColor1);
+  border-radius: @radius;
+  background-color: rgba(12, 20, 35, 0.35);
+}
+
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+  color: var(--menuText2Normal);
   font-size: var(--fontSizeXS);
 }
 
-.assetChooserHeader strong { margin-right: 10rem; color: @assets; }
-.assetChooserHeader span { color: var(--menuText2Normal); }
+.facts span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.facts span:first-child { color: var(--menuText1Normal); font-weight: bold; }
+
+.mainAction,
+.dangerButton,
+.quietButton {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: @radius;
+  font-family: var(--fontFamily);
+  font-weight: bold;
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+.mainAction {
+  height: 40rem;
+  border: 1rem solid rgba(79, 195, 247, 0.75);
+  color: #10202a;
+  background-color: @paths;
+  font-size: var(--fontSizeS);
+}
+
+.mainActionBuild {
+  border-color: rgba(124, 212, 85, 0.72);
+  color: #10220f;
+  background-color: @assets;
+}
+
+// A hint action tells what to do on the map; it is not a pressable step.
+.mainAction[disabled] {
+  border-color: var(--menuBorderColor1);
+  color: var(--menuText1Normal);
+  background-color: rgba(255, 255, 255, 0.06);
+  font-weight: normal;
+}
+
+.actionRow { display: flex; gap: @gap; }
+
+.dangerButton,
+.quietButton {
+  height: 30rem;
+  font-size: var(--fontSizeXS);
+}
+
+.dangerButton {
+  border: 1rem solid rgba(233, 120, 104, 0.65);
+  color: white;
+  background-color: rgba(233, 120, 104, 0.22);
+}
+
+.quietButton {
+  border: 1rem solid var(--menuBorderColor1);
+  color: var(--menuText1Normal);
+  background-color: var(--menuActiveColor);
+}
+
+.mainAction:hover:not(:disabled),
+.dangerButton:hover:not(:disabled),
+.quietButton:hover:not(:disabled) { filter: brightness(1.14); }
+
+.dangerButton[disabled],
+.quietButton[disabled] { opacity: 0.35; }
+
+/* ----------------------------------------------------------- window */
+
+.window {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 290rem;
+  margin-top: @gap;
+}
+
+.windowHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: @gap;
+  min-height: 38rem;
+  padding: 4rem @inset;
+  box-sizing: border-box;
+  border-bottom: 1rem solid var(--menuBorderColor1);
+  background-color: rgba(12, 20, 35, 0.72);
+  font-size: var(--fontSizeXS);
+}
+
+.windowHead strong { color: var(--menuText1Normal); }
+
+.windowTabs { display: flex; gap: 4rem; min-width: 0; }
+
+.windowTabs button {
+  height: @controlHeight;
+  padding: 0 10rem;
+  border: 1rem solid transparent;
+  border-radius: @radius;
+  color: var(--menuText2Normal);
+  background-color: transparent;
+  font-family: var(--fontFamily);
+  font-size: var(--fontSizeXS);
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+.windowTabs button:hover { background-color: var(--menuHoverColor); }
+
+.windowTabs .windowTabActive {
+  border-color: @paths;
+  color: var(--menuText1Normal);
+  background-color: @selected;
+}
+
+.windowBody {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: @inset;
+  box-sizing: border-box;
+}
+
+.windowEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  color: var(--menuText2Normal);
+  font-size: var(--fontSizeXS);
+}
+
+/* ------------------------------------------------------ asset grid */
 
 .assetChoiceBody {
   display: flex;
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
+  overflow: hidden;
+  border: 1rem solid var(--menuBorderColor1);
+  border-radius: @radius;
+  background-color: @pane;
 }
 
 .assetChoiceGrid {
@@ -1182,21 +676,15 @@
   align-content: flex-start;
   flex: 1 1 auto;
   min-height: 0;
-  padding: 8rem;
-  overflow-y: auto;
+  padding: 6rem;
   box-sizing: border-box;
+  overflow-y: auto;
   scrollbar-color: @assets rgba(255, 255, 255, 0.08);
-  scrollbar-width: auto;
 }
 
 .assetChoiceGrid::-webkit-scrollbar { width: 10rem; }
-.assetChoiceGrid::-webkit-scrollbar-track {
-  background-color: rgba(255, 255, 255, 0.08);
-}
-.assetChoiceGrid::-webkit-scrollbar-thumb {
-  border-radius: 5rem;
-  background-color: @assets;
-}
+.assetChoiceGrid::-webkit-scrollbar-track { background-color: rgba(255, 255, 255, 0.08); }
+.assetChoiceGrid::-webkit-scrollbar-thumb { border-radius: 5rem; background-color: @assets; }
 
 .assetChoiceTile {
   position: relative;
@@ -1204,25 +692,40 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  flex: 0 0 20%;
-  width: 20%;
-  height: 84rem;
-  padding: 8rem;
+  flex: 0 0 12.5%;
+  width: 12.5%;
+  height: 76rem;
+  padding: 6rem;
   box-sizing: border-box;
   border: 2rem solid rgba(255, 255, 255, 0.06);
   color: var(--menuText1Normal);
   background-color: rgba(255, 255, 255, 0.025);
+  font-family: var(--fontFamily);
   pointer-events: auto;
 }
 
 .assetChoiceTile:hover { background-color: var(--menuHoverColor); }
+.assetChoiceTile[disabled] { opacity: 0.35; pointer-events: none; }
 
 .assetChoiceTileActive {
-  border-color: @assets;
-  background-color: rgba(124, 212, 85, 0.12);
+  border-color: @paths;
+  background-color: @selected;
 }
 
-.assetChoiceIcon { max-width: 48rem; max-height: 48rem; object-fit: contain; }
+.assetChoiceIcon { max-width: 44rem; max-height: 44rem; object-fit: contain; }
+
+.assetChoiceFallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40rem;
+  height: 40rem;
+  border-radius: 6rem;
+  color: @assets;
+  background-color: rgba(255, 255, 255, 0.08);
+  font-size: 18rem;
+  font-weight: bold;
+}
 
 .assetChoiceName {
   display: block;
@@ -1237,49 +740,90 @@
   white-space: nowrap;
 }
 
-/* Park and Plaza share the same density row and side-by-side work panes. */
-.plazaArrangementStage .assetStageHeader {
-  gap: @panelGap;
-  flex: 0 0 auto;
-  min-height: 0;
-}
-
-.plazaArrangementDensity {
+.assetChoiceCheck {
+  position: absolute;
+  right: 3rem;
+  bottom: 3rem;
   display: flex;
   align-items: center;
-  flex: 0 0 49%;
-  height: @settingControlHeight;
+  justify-content: center;
+  width: 16rem;
+  height: 16rem;
+  border-radius: 4rem;
+  color: #10220f;
+  background-color: @assets;
+  font-size: 11rem;
+  font-weight: bold;
 }
 
-.plazaArrangementDensity > span { flex-basis: @settingLabelWidth; }
-.plazaArrangementDensity .densitySlider { flex: 1 1 auto; width: auto; }
+.assetScrollControls {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 30rem;
+  border-left: 1rem solid var(--menuBorderColor1);
+}
+
+.assetScrollControls button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 50%;
+  border: 0;
+  color: var(--menuText1Normal);
+  background-color: rgba(255, 255, 255, 0.04);
+  font-family: var(--fontFamily);
+  font-size: 13rem;
+  pointer-events: auto;
+}
+
+.assetScrollControls button + button { border-top: 1rem solid var(--menuBorderColor1); }
+.assetScrollControls button:hover { background-color: var(--menuHoverColor); }
+
+/* ------------------------------------------------ plaza arrangement */
 
 .plazaArrangementWorkspace {
   display: flex;
-  flex-direction: row;
-  gap: @panelGap;
-  flex: 0 0 @assetPaneHeight;
-  height: @assetPaneHeight;
+  flex: 1 1 auto;
+  gap: @gap;
   min-width: 0;
-  max-height: @assetPaneHeight;
 }
 
 .plazaArrangementSlots,
 .plazaArrangementPicker {
   display: flex;
   flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
   overflow: hidden;
   border: 1rem solid var(--menuBorderColor1);
-  border-radius: @assetPaneRadius;
-  background: @surfaceStrong;
+  border-radius: @radius;
+  background-color: @pane;
 }
+
+.plazaArrangementSlots { flex: 0 0 330rem; }
+.plazaArrangementPicker .assetChoiceBody { border: 0; border-radius: 0; }
+.plazaArrangementPicker .assetChoiceTile { flex-basis: 20%; width: 20%; }
+
+.assetChooserHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 30rem;
+  padding: 0 @inset;
+  border-bottom: 1rem solid var(--menuBorderColor1);
+  background-color: rgba(255, 255, 255, 0.045);
+  font-size: var(--fontSizeXS);
+}
+
+.assetChooserHeader strong { color: var(--menuText1Normal); }
+.assetChooserHeader span { color: var(--menuText2Normal); }
 
 .plazaArrangementSlotRow {
   display: flex;
-  gap: @panelGap;
   flex: 1 1 auto;
+  gap: 6rem;
   min-height: 0;
-  padding: 8rem;
+  padding: @inset;
 }
 
 .plazaArrangementSlot,
@@ -1290,51 +834,64 @@
   justify-content: center;
   flex: 1 1 0;
   min-width: 0;
-  padding: 5rem;
+  padding: 4rem;
   border: 1rem solid var(--menuBorderColor1);
-  border-radius: 5rem;
+  border-radius: @radius;
   color: var(--menuText1Normal);
-  background: rgba(255, 255, 255, 0.04);
+  background-color: rgba(255, 255, 255, 0.04);
+  font-family: var(--fontFamily);
   pointer-events: auto;
 }
 
 .plazaArrangementSlotActive {
-  border-color: @assets;
-  background: rgba(124, 212, 85, 0.14);
+  border-color: @paths;
+  background-color: @selected;
 }
 
-.plazaArrangementSlot img { max-width: 55rem; height: 60rem; object-fit: contain; }
-.plazaArrangementSlot b { font-size: 28rem; color: @assets; }
+.plazaArrangementSlot img { max-width: 44rem; height: 48rem; object-fit: contain; }
+.plazaArrangementSlot b { color: @assets; font-size: 24rem; }
+
 .plazaArrangementSlot small {
   max-width: 100%;
   overflow: hidden;
+  font-size: 8rem;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 8rem;
 }
-.plazaArrangementAdd { font-size: 28rem; color: @assets; }
+
+.plazaArrangementAdd { color: @assets; font-size: 24rem; }
 
 .plazaArrangementActions {
   display: flex;
-  gap: @panelGap;
-  flex: 0 0 38rem;
-  padding: 0 10rem 9rem;
+  justify-content: space-between;
+  flex: 0 0 34rem;
+  gap: @gap;
+  padding: 0 @inset @inset;
 }
+
 .plazaArrangementActions button {
-  min-width: 35rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34rem;
+  padding: 0 8rem;
   border: 1rem solid var(--menuBorderColor1);
   border-radius: 4rem;
   color: var(--menuText1Normal);
-  background: rgba(255, 255, 255, 0.07);
+  background-color: rgba(255, 255, 255, 0.07);
+  font-family: var(--fontFamily);
+  font-size: var(--fontSizeXS);
   pointer-events: auto;
 }
-.plazaArrangementActions button:last-child { margin-left: auto; padding: 0 9rem; }
+
+.plazaArrangementActions button:last-child { flex: 1 1 auto; }
+.plazaArrangementActions button[disabled] { opacity: 0.35; }
 
 .plazaArrangementKinds {
   display: flex;
-  flex: 0 0 34rem;
-  min-height: 34rem;
+  flex: 0 0 30rem;
 }
+
 .plazaArrangementKinds button {
   flex: 1 1 0;
   min-width: 0;
@@ -1343,19 +900,22 @@
   border: 0;
   border-right: 1rem solid var(--menuBorderColor1);
   color: var(--menuText2Normal);
-  background: rgba(255, 255, 255, 0.04);
+  background-color: rgba(255, 255, 255, 0.04);
+  font-family: var(--fontFamily);
   font-size: 10rem;
   text-overflow: ellipsis;
   white-space: nowrap;
   pointer-events: auto;
 }
+
 .plazaArrangementKinds .segmentActive {
   color: var(--menuText1Normal);
-  background: rgba(124, 212, 85, 0.20);
+  background-color: @selected;
 }
+
 .plazaArrangementSelection {
   flex: 0 0 22rem;
-  padding: 3rem 8rem;
+  padding: 3rem @inset;
   overflow: hidden;
   color: var(--menuText2Normal);
   font-size: 9rem;
@@ -1363,60 +923,46 @@
   white-space: nowrap;
 }
 
-.assetScrollControls {
-  display: flex;
-  flex-direction: column;
-  flex: 0 0 32rem;
-  border-left: 1rem solid var(--menuBorderColor1);
+/* --------------------------------------------------- dropdown caret */
+
+// Marks chips and buttons that open the window below the bar.
+.caret {
+  flex: 0 0 12rem;
+  width: 12rem;
+  height: 12rem;
+  color: var(--menuText2Normal);
 }
 
-.assetScrollControls button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 1 1 50%;
-  min-height: 48rem;
-  border: 0;
+.caretOpen {
   color: var(--menuText1Normal);
-  background-color: rgba(255, 255, 255, 0.04);
+  transform: rotate(180deg);
+}
+
+// A chip that switches on click, e.g. the park lake.
+.toggleChip {
+  gap: 5rem;
+  padding: 0 8rem 0 0;
+  color: var(--menuText1Normal);
   font-family: var(--fontFamily);
-  font-size: 13rem;
+  font-size: var(--fontSizeXS);
+  white-space: nowrap;
   pointer-events: auto;
 }
 
-.assetScrollControls button + button {
-  border-top: 1rem solid var(--menuBorderColor1);
+.toggleChip:hover:not(:disabled) { background-color: var(--menuHoverColor); }
+.toggleChip[disabled] { opacity: 0.45; }
+
+/* ------------------------------------------------------------ icons */
+
+.icon {
+  display: block;
+  flex: 0 0 13rem;
+  width: 13rem;
+  height: 13rem;
 }
 
-.assetScrollControls button:hover { background-color: var(--menuHoverColor); }
-
-.assetChoiceCheck {
-  position: absolute;
-  right: 3rem;
-  bottom: 3rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18rem;
-  height: 18rem;
-  border-radius: 4rem;
-  color: #10220f;
-  background-color: @assets;
-  font-size: 13rem;
-  font-weight: bold;
-}
-
-.assetChooserEmpty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 1 1 auto;
-  color: var(--menuText2Normal);
-  font-size: var(--fontSizeXS);
-}
-
-@media (max-width: 1180px) {
-  .toolSlot { flex-basis: 250rem; }
-  .progressStep { padding-left: 5rem; padding-right: 5rem; }
-  .progressNumber { margin-right: 3rem; }
+.placeholderIcon {
+  display: block;
+  width: 20rem;
+  height: 20rem;
 }

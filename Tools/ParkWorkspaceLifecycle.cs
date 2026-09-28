@@ -14,7 +14,7 @@ namespace ParkManager.Tools
     {
         private bool _buildDecorationsAfterPaths;
 
-        /// <summary>Commits both previews from the final wizard step.</summary>
+        /// <summary>Commits both previews; the panel offers it once both are planned.</summary>
         internal void BuildPark()
         {
             if (BuildBusy || DecorationEditingLocked) return;

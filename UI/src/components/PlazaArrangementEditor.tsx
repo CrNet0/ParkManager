@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useValue } from "cs2/api";
 import { AssetChoiceMap } from "../assetChoices";
-import { editPlazaArrangement, plazaArrangementJson$,
-  setFurnitureDensity } from "../bindings";
+import { editPlazaArrangement, plazaArrangementJson$ } from "../bindings";
 import { AssetIcon, scrollTileGrid, useIconFailures } from "./AssetIcon";
-import { RangeSlider } from "./RangeSlider";
+import { Hint } from "./Hint";
+import { ChevronIcon, PlaceholderIcon } from "./Icons";
 import { Texts } from "../i18n";
 import styles from "../panel.module.less";
 
 type Item = { kind: number; name: string };
-const kinds = [
+export const arrangementKinds = [
   { kind: 0, key: "bench" },
   { kind: 1, key: "lamp" },
   { kind: 2, key: "trashbin" },
@@ -17,7 +17,7 @@ const kinds = [
   { kind: 4, key: "plazaplanter" },
 ] as const;
 
-const parseArrangement = (json: string): Item[] => {
+export const parseArrangement = (json: string): Item[] => {
   try {
     const value = JSON.parse(json);
     return Array.isArray(value) ? value.slice(0, 5).filter((item) =>
@@ -30,22 +30,18 @@ type Props = {
   t: Texts;
   choices: AssetChoiceMap;
   busy: boolean;
-  density: number;
-  decorationPlanReady: boolean;
-  /** Localized notice shown instead of the help text, e.g. "does not fit". */
-  notice: string | null;
 };
 
 /** Five ordered slots; every asset choice applies to exactly one slot. */
-export const PlazaArrangementEditor = ({ t, choices, busy, density,
-  decorationPlanReady, notice }: Props) => {
+export const PlazaArrangementEditor = ({ t, choices, busy }: Props) => {
   const arrangement = parseArrangement(useValue(plazaArrangementJson$));
   const [selected, setSelected] = useState(0);
   const icons = useIconFailures();
   const gridRef = useRef<HTMLDivElement | null>(null);
   const current = arrangement[Math.min(selected, arrangement.length - 1)];
   const selectedIndex = Math.min(selected, arrangement.length - 1);
-  const category = kinds.find((kind) => kind.kind === current?.kind) || kinds[0];
+  const category = arrangementKinds.find((kind) => kind.kind === current?.kind)
+    || arrangementKinds[0];
   const options = choices[category.key]?.options || [];
   const selectedOption = options.find((option) => option.name === current?.name);
 
@@ -53,102 +49,87 @@ export const PlazaArrangementEditor = ({ t, choices, busy, density,
     [selectedIndex, current?.kind]);
   const send = (action: string, index: number, value?: string | number) =>
     editPlazaArrangement(`${action}\n${index}${value === undefined ? "" : `\n${value}`}`);
-  return <div className={styles.plazaArrangementStage}>
-    <div className={styles.assetStageHeader} data-testid="asset-header">
-      <div>
-        <p>{decorationPlanReady ? t.plazaDecorationPreview
-          : notice ?? t.plazaArrangementHelp}</p>
+  return <div className={styles.plazaArrangementWorkspace}
+    data-testid="plaza-arrangement-workspace">
+    <div className={styles.plazaArrangementSlots} data-testid="plaza-arrangement-slots">
+      <div className={styles.assetChooserHeader}>
+        <strong>{t.plazaArrangement}</strong>
+        <span>{arrangement.length} / 5</span>
       </div>
-      <div className={`${styles.densityControl} ${styles.plazaArrangementDensity}`}
-        data-testid="plaza-density-settings">
-        <span>{t.plazaArrangementDensity}</span>
-        <RangeSlider label={t.plazaArrangementDensity} value={density}
-          minimum={25} maximum={200} step={25} disabled={busy}
-          formatValue={(value) => `${value}%`}
-          onChange={setFurnitureDensity} />
-        <strong>{density}%</strong>
-      </div>
-    </div>
-    <div className={styles.plazaArrangementWorkspace}
-      data-testid="plaza-arrangement-workspace">
-      <div className={styles.plazaArrangementSlots} data-testid="plaza-arrangement-slots">
-        <div className={styles.assetChooserHeader}>
-          <strong>{t.plazaArrangement}</strong>
-          <span>{arrangement.length} / 5</span>
-        </div>
-        <div className={styles.plazaArrangementSlotRow}>
-          {arrangement.map((item, index) => {
-            const kind = kinds.find((candidate) => candidate.kind === item.kind)
-              || kinds[0];
-            const asset = choices[kind.key]?.options.find((option) =>
-              option.name === item.name);
-            return <button key={index} type="button"
-              className={`${styles.plazaArrangementSlot} ${index === selectedIndex
-                ? styles.plazaArrangementSlotActive : ""}`}
-              aria-pressed={index === selectedIndex}
-              onClick={() => setSelected(index)}>
-              <span>{index + 1}</span>
-              <AssetIcon icon={asset?.icon} icons={icons}
-                fallback={<b>{t.categories[kind.key].charAt(0)}</b>} />
-              <small title={item.name || t.automatic}>
-                {item.name || t.categories[kind.key]}</small>
-            </button>;
-          })}
-          {arrangement.length < 5 ? <button type="button"
-            className={styles.plazaArrangementAdd} disabled={busy}
-            title={t.plazaArrangementAdd}
+      <div className={styles.plazaArrangementSlotRow}>
+        {arrangement.map((item, index) => {
+          const kind = arrangementKinds.find((candidate) => candidate.kind === item.kind)
+            || arrangementKinds[0];
+          const asset = choices[kind.key]?.options.find((option) =>
+            option.name === item.name);
+          return <button key={index} type="button"
+            className={`${styles.plazaArrangementSlot} ${index === selectedIndex
+              ? styles.plazaArrangementSlotActive : ""}`}
+            aria-pressed={index === selectedIndex}
+            onClick={() => setSelected(index)}>
+            <span>{index + 1}</span>
+            <AssetIcon icon={asset?.icon} icons={icons}
+              fallback={<b>{t.categories[kind.key].charAt(0)}</b>} />
+            <small>{item.name || t.categories[kind.key]}</small>
+          </button>;
+        })}
+        {arrangement.length < 5 ? <Hint text={t.plazaArrangementAdd}>
+          <button type="button" className={styles.plazaArrangementAdd}
+            disabled={busy} aria-label={t.plazaArrangementAdd}
             onClick={() => {
               editPlazaArrangement("add");
               setSelected(arrangement.length);
-            }}>+</button> : null}
-        </div>
-        <div className={styles.plazaArrangementActions}>
-          <button disabled={busy || selectedIndex <= 0}
-            onClick={() => { send("move", selectedIndex, selectedIndex - 1);
-              setSelected(selectedIndex - 1); }}>←</button>
-          <button disabled={busy || selectedIndex >= arrangement.length - 1}
-            onClick={() => { send("move", selectedIndex, selectedIndex + 1);
-              setSelected(selectedIndex + 1); }}>→</button>
-          <button disabled={busy || arrangement.length <= 1}
-            onClick={() => { send("remove", selectedIndex);
-              setSelected(Math.max(0, selectedIndex - 1)); }}>
-            {t.plazaArrangementRemove}</button>
-        </div>
+            }}>+</button>
+        </Hint> : null}
       </div>
-      <div className={styles.plazaArrangementPicker} data-testid="plaza-arrangement-picker">
-        <div className={styles.plazaArrangementKinds}>
-          {kinds.map((kind) => <button key={kind.kind} type="button"
-            className={kind.kind === current?.kind ? styles.segmentActive : ""}
-            disabled={busy || !current}
-            onClick={() => send("kind", selectedIndex, kind.kind)}>
-            {t.categories[kind.key]}</button>)}
-        </div>
-        <div className={styles.assetChoiceBody}>
-          <div className={styles.assetChoiceGrid} ref={gridRef}>
-            {options.map((option) => <button key={option.name}
+      <div className={styles.plazaArrangementActions}>
+        <button type="button" disabled={busy || selectedIndex <= 0}
+          onClick={() => { send("move", selectedIndex, selectedIndex - 1);
+            setSelected(selectedIndex - 1); }}><ChevronIcon direction="left" /></button>
+        <button type="button" disabled={busy || selectedIndex >= arrangement.length - 1}
+          onClick={() => { send("move", selectedIndex, selectedIndex + 1);
+            setSelected(selectedIndex + 1); }}><ChevronIcon direction="right" /></button>
+        <button type="button" disabled={busy || arrangement.length <= 1}
+          onClick={() => { send("remove", selectedIndex);
+            setSelected(Math.max(0, selectedIndex - 1)); }}>
+          {t.plazaArrangementRemove}</button>
+      </div>
+    </div>
+    <div className={styles.plazaArrangementPicker} data-testid="plaza-arrangement-picker">
+      <div className={styles.plazaArrangementKinds}>
+        {arrangementKinds.map((kind) => <button key={kind.kind} type="button"
+          className={kind.kind === current?.kind ? styles.segmentActive : ""}
+          disabled={busy || !current}
+          onClick={() => send("kind", selectedIndex, kind.kind)}>
+          {t.categories[kind.key]}</button>)}
+      </div>
+      <div className={styles.assetChoiceBody}>
+        <div className={styles.assetChoiceGrid} ref={gridRef}>
+          {options.map((option) => <Hint key={option.name} text={option.name}>
+            <button type="button"
               className={`${styles.assetChoiceTile} ${option.name === current?.name
                 ? styles.assetChoiceTileActive : ""}`}
-              disabled={busy} title={option.name} aria-label={option.name}
+              disabled={busy} aria-label={option.name}
               aria-pressed={option.name === current?.name}
               onClick={() => send("asset", selectedIndex, option.name)}>
               <AssetIcon icon={option.icon} icons={icons}
                 className={styles.assetChoiceIcon}
-                fallback={<span className={styles.assetChoiceFallback}>✦</span>} />
+                fallback={<span className={styles.assetChoiceFallback}><PlaceholderIcon /></span>} />
               <span className={styles.assetChoiceName}>{option.name}</span>
               {option.name === current?.name
                 ? <span className={styles.assetChoiceCheck}>✓</span> : null}
-            </button>)}
-          </div>
-          <div className={styles.assetScrollControls}>
-            <button title={t.scrollAssetsUp}
-              onClick={() => scrollTileGrid(gridRef.current, -1)}>▲</button>
-            <button title={t.scrollAssetsDown}
-              onClick={() => scrollTileGrid(gridRef.current, 1)}>▼</button>
-          </div>
+            </button>
+          </Hint>)}
         </div>
-        <div className={styles.plazaArrangementSelection}>
-          {selectedOption?.name || t.plazaArrangementChooseAsset}
+        <div className={styles.assetScrollControls}>
+          <button type="button" aria-label={t.scrollAssetsUp}
+            onClick={() => scrollTileGrid(gridRef.current, -1)}><ChevronIcon direction="up" /></button>
+          <button type="button" aria-label={t.scrollAssetsDown}
+            onClick={() => scrollTileGrid(gridRef.current, 1)}><ChevronIcon direction="down" /></button>
         </div>
+      </div>
+      <div className={styles.plazaArrangementSelection}>
+        {selectedOption?.name || t.plazaArrangementChooseAsset}
       </div>
     </div>
   </div>;

@@ -54,3 +54,20 @@ export const parseAssetChoices = (json: string): AssetChoiceMap => {
     return {};
   }
 };
+
+/** Sentinel the C# tool uses for "plan without a centerpiece". */
+export const NO_PLAZA_CENTER = "__none__";
+
+/**
+ * Parses the published centerpiece list. Entries without an icon are kept:
+ * a missing or broken thumbnail is a display concern and must not make an
+ * asset unselectable or block planning.
+ */
+export const parsePlazaCenterOptions = (json: string): AssetChoiceOption[] => {
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? parseOptions(parsed) : [];
+  } catch {
+    return [];
+  }
+};

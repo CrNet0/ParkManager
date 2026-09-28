@@ -1,24 +1,40 @@
-export type WorkflowStage = 0 | 1 | 2 | 3;
-
-export type WorkflowModel = {
-  progressStage: WorkflowStage;
-  stageAvailability: readonly [boolean, boolean, boolean, boolean];
-};
+/** The one next step the main button offers. */
+export type NextAction =
+  | "drawOutline"      // outline open or invalid: nothing to press yet
+  | "placeEntrances"   // outline ready: switch the map to entrance mode
+  | "markEntrance"     // entrance mode without entrances: nothing to press yet
+  | "plan"             // entrances set: plan paths (and furnishings) together
+  | "chooseSurface"    // plan exists but no ground surface is selected
+  | "planFurnishings"  // paths planned, furnishings not (yet or anymore)
+  | "build"            // both previews ready, or a failed furnishing build
+  | "finish"           // everything built: detach and start the next park
+  | "busy";            // a build is running
 
 type WorkflowFacts = {
-  plannerMode: boolean;
   polygonValid: boolean;
+  plannerMode: boolean;
+  entranceCount: number;
+  pathsPlanned: boolean;
+  surfaceSelected: boolean;
+  decorationsPlanned: boolean;
   pathsBuilt: boolean;
   decorationsBuilt: boolean;
-  pathsPlanned: boolean;
-  decorationsPlanned: boolean;
+  busy: boolean;
 };
 
-/** Derives navigation progress and reachability from the durable workflow facts. */
-export const deriveWorkflowModel = ({ plannerMode, polygonValid,
-  pathsBuilt, decorationsBuilt, pathsPlanned, decorationsPlanned }: WorkflowFacts): WorkflowModel => ({
-  progressStage: (pathsBuilt || decorationsBuilt ? 3 : plannerMode ? 1 : 0) as WorkflowStage,
-  stageAvailability: [!pathsBuilt, polygonValid && !pathsBuilt,
-    polygonValid && pathsPlanned && !pathsBuilt,
-    pathsBuilt || (polygonValid && pathsPlanned && decorationsPlanned)],
-});
+/** Derives the main action from the durable workflow facts. */
+export const deriveNextAction = (facts: WorkflowFacts): NextAction => {
+  if (facts.busy) return "busy";
+  if (facts.pathsBuilt) return facts.decorationsBuilt ? "finish" : "build";
+  if (!facts.polygonValid) return "drawOutline";
+  if (!facts.plannerMode) return "placeEntrances";
+  if (facts.entranceCount === 0) return "markEntrance";
+  if (!facts.pathsPlanned) return "plan";
+  if (!facts.surfaceSelected) return "chooseSurface";
+  if (!facts.decorationsPlanned) return "planFurnishings";
+  return "build";
+};
+
+/** Actions that only describe what the player has to do on the map. */
+export const isHintAction = (action: NextAction) => action === "drawOutline"
+  || action === "markEntrance" || action === "chooseSurface" || action === "busy";
