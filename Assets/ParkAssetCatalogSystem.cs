@@ -4,7 +4,6 @@ using System.Text;
 using Game;
 using Game.Areas;
 using Game.Prefabs;
-using Game.Rendering;
 using ParkManager.Tools;
 using ParkManager.Geometry;
 using Unity.Mathematics;
@@ -72,15 +71,18 @@ namespace ParkManager.Assets
         // Keep the icon cycler payload bounded even when prefab-name matching
         // finds thousands of objects.
         private const int MaximumUiOptionsPerCategory = 120;
-        private const int MaximumParkPaletteOptions = 80;
+
+        // Composite planters keep their dedicated plaza category even though
+        // some of them carry plant metadata.
+        private static readonly string[] PlanterNames =
+        {
+            "planter", "flowerpot", "flower pot", "raisedbed", "raised bed",
+            "plantbox", "plant box",
+        };
 
         private PrefabSystem _prefabs;
         private EntityQuery _prefabQuery;
         private bool _scanRequested = true;
-        private bool _ready;
-        private string _summary = "Assetkatalog wird aufgebaut …";
-        private string _parkPaletteOptionsJson = "[]";
-        private string _selectedParkPalette = string.Empty;
         private readonly Dictionary<ParkAssetCategory, List<ParkAssetChoice>> _choices
             = new Dictionary<ParkAssetCategory, List<ParkAssetChoice>>();
         private readonly Dictionary<ParkAssetCategory, string> _selected
@@ -122,20 +124,13 @@ namespace ParkManager.Assets
             if (!_choices.TryGetValue(category, out var choices)
                 || choices.Count == 0) return false;
             _selected.TryGetValue(category, out name);
-            for (var i = 0; i < choices.Count; i++)
-                if (string.Equals(choices[i].Name, name, StringComparison.Ordinal))
-                {
-                    prefab = choices[i].Prefab;
-                    return prefab != Entity.Null && EntityManager.Exists(prefab);
-                }
-            name = ChooseDefault(category, choices);
-            for (var i = 0; i < choices.Count; i++)
-                if (string.Equals(choices[i].Name, name, StringComparison.Ordinal))
-                {
-                    prefab = choices[i].Prefab;
-                    return prefab != Entity.Null && EntityManager.Exists(prefab);
-                }
-            return false;
+            var choice = FindChoice(choices, name);
+            if (choice == null)
+            {
+                name = ChooseDefault(category, choices);
+                choice = FindChoice(choices, name);
+            }
+            return TryUse(choice, out prefab, out _);
         }
 
         /// <summary>Resolves one explicit arrangement asset without falling back
@@ -144,17 +139,9 @@ namespace ParkManager.Assets
             out Entity prefab)
         {
             prefab = Entity.Null;
-            if (string.IsNullOrEmpty(name)
-                || !_choices.TryGetValue(category, out var choices)) return false;
-            for (var i = 0; i < choices.Count; i++)
-                if (string.Equals(choices[i].Name, name, StringComparison.Ordinal)
-                    && choices[i].Prefab != Entity.Null
-                    && EntityManager.Exists(choices[i].Prefab))
-                {
-                    prefab = choices[i].Prefab;
-                    return true;
-                }
-            return false;
+            return !string.IsNullOrEmpty(name)
+                && _choices.TryGetValue(category, out var choices)
+                && TryUse(FindChoice(choices, name), out prefab, out _);
         }
 
         /// <summary>
@@ -256,10 +243,9 @@ namespace ParkManager.Assets
 
         private void SelectIfAvailable(ParkAssetCategory category, string name)
         {
-            if (string.IsNullOrEmpty(name)
-                || !_choices.TryGetValue(category, out var choices)) return;
-            if (choices.FindIndex(choice => string.Equals(choice.Name, name,
-                StringComparison.Ordinal)) >= 0) _selected[category] = name;
+            if (!string.IsNullOrEmpty(name)
+                && _choices.TryGetValue(category, out var choices)
+                && FindChoice(choices, name) != null) _selected[category] = name;
         }
 
         private bool IsUsablePlazaCenter(ParkAssetChoice choice,
@@ -272,60 +258,29 @@ namespace ParkManager.Assets
                 && PlazaPlanner.CanFitCenterpiece(polygon, radius);
         }
 
-        internal bool TryGetVariant(ParkAssetCategory category, uint selector,
-            out Entity prefab, out string name)
-        {
-            prefab = Entity.Null;
-            name = string.Empty;
-            if (!_choices.TryGetValue(category, out var choices)
-                || choices.Count == 0) return false;
-            var choice = choices[(int)(selector % (uint)choices.Count)];
-            prefab = choice.Prefab;
-            name = choice.Name;
-            return prefab != Entity.Null && EntityManager.Exists(prefab);
-        }
-
         internal bool TryGetParkVariant(ParkAssetCategory category, int seed,
             uint selector, out Entity prefab, out string name)
         {
-            prefab = Entity.Null;
-            name = string.Empty;
             if (IsMultiCategory(category)
                 && _multiSelected.TryGetValue(category, out var selectedMany)
                 && selectedMany.Count > 0
                 && _choices.TryGetValue(category, out var multiChoices))
             {
-                var count = 0;
-                for (var i = 0; i < multiChoices.Count; i++)
-                    if (selectedMany.Contains(multiChoices[i].Name)) count++;
-                if (count > 0)
-                {
-                    var target = (int)(selector % (uint)count);
-                    for (var i = 0; i < multiChoices.Count; i++)
-                    {
-                        var choice = multiChoices[i];
-                        if (!selectedMany.Contains(choice.Name)) continue;
-                        if (target-- > 0) continue;
-                        prefab = choice.Prefab;
-                        name = choice.Name;
-                        return prefab != Entity.Null && EntityManager.Exists(prefab);
-                    }
-                }
+                var picked = multiChoices.FindAll(
+                    choice => selectedMany.Contains(choice.Name));
+                if (picked.Count > 0)
+                    return TryUse(picked[(int)(selector % (uint)picked.Count)],
+                        out prefab, out name);
             }
             if (_selected.TryGetValue(category, out var selected)
                 && !string.IsNullOrEmpty(selected)
                 && TryGetSelected(category, out prefab, out name)) return true;
             if (_parkPalettes.Count > 0)
             {
-                var palette = ResolveParkPalette(seed);
-                var choices = palette.Choices[category];
+                var choices = ResolveParkPalette(seed).Choices[category];
                 if (choices.Count > 0)
-                {
-                    var choice = choices[(int)(selector % (uint)choices.Count)];
-                    prefab = choice.Prefab;
-                    name = choice.Name;
-                    return prefab != Entity.Null && EntityManager.Exists(prefab);
-                }
+                    return TryUse(choices[(int)(selector % (uint)choices.Count)],
+                        out prefab, out name);
             }
 
             // A park may legitimately have no fence or furniture of one kind.
@@ -369,30 +324,32 @@ namespace ParkManager.Assets
         internal bool TryGetPathNormalRadius(Entity prefab, out float radius)
         {
             radius = 0f;
-            if (prefab == Entity.Null || !EntityManager.Exists(prefab)
-                || !EntityManager.HasComponent<ObjectGeometryData>(prefab))
-                return false;
-            var bounds = EntityManager.GetComponentData<ObjectGeometryData>(prefab)
-                .m_Bounds;
+            if (!TryGetObjectBounds(prefab, out var bounds)) return false;
             radius = Math.Max(Math.Abs(bounds.min.z), Math.Abs(bounds.max.z));
-            return radius > 0.01f && !float.IsNaN(radius)
-                && !float.IsInfinity(radius);
+            return radius > 0.01f && math.isfinite(radius);
         }
 
         /// <summary>Maximum horizontal extent of a plaza centerpiece mesh.</summary>
         internal bool TryGetPlanarRadius(Entity prefab, out float radius)
         {
             radius = 0f;
-            if (prefab == Entity.Null || !EntityManager.Exists(prefab)
-                || !EntityManager.HasComponent<ObjectGeometryData>(prefab))
-                return false;
-            var bounds = EntityManager.GetComponentData<ObjectGeometryData>(prefab)
-                .m_Bounds;
+            if (!TryGetObjectBounds(prefab, out var bounds)) return false;
             radius = Math.Max(
                 Math.Max(Math.Abs(bounds.min.x), Math.Abs(bounds.max.x)),
                 Math.Max(Math.Abs(bounds.min.z), Math.Abs(bounds.max.z)));
-            return radius > 0.01f && !float.IsNaN(radius)
-                && !float.IsInfinity(radius);
+            return radius > 0.01f && math.isfinite(radius);
+        }
+
+        private bool TryGetObjectBounds(Entity prefab,
+            out Colossal.Mathematics.Bounds3 bounds)
+        {
+            bounds = default;
+            if (prefab == Entity.Null || !EntityManager.Exists(prefab)
+                || !EntityManager.HasComponent<ObjectGeometryData>(prefab))
+                return false;
+            bounds = EntityManager.GetComponentData<ObjectGeometryData>(prefab)
+                .m_Bounds;
+            return true;
         }
 
         /// <summary>
@@ -405,39 +362,24 @@ namespace ParkManager.Assets
                 && (EntityManager.HasComponent<FenceData>(prefab)
                     || EntityManager.HasComponent<NetFenceData>(prefab));
 
+        private bool HasNetworkFence()
+            => _choices[ParkAssetCategory.Fence]
+                .Exists(choice => IsNetworkFence(choice.Prefab));
+
         internal string GetParkPaletteName(int seed)
         {
             foreach (var selected in _multiSelected.Values)
-                if (selected.Count > 0) return "individuelle Mischung";
+                if (selected.Count > 0) return UiText.Of("palette.customMix");
             foreach (var selected in _selected.Values)
-                if (!string.IsNullOrEmpty(selected)) return "individuelle Auswahl";
-            if (_parkPalettes.Count == 0) return "kuratierter Fallback";
+                if (!string.IsNullOrEmpty(selected))
+                    return UiText.Of("palette.customSelection");
+            if (_parkPalettes.Count == 0) return UiText.Of("palette.curatedFallback");
             return ResolveParkPalette(seed).Name;
         }
 
-        internal void SelectParkPalette(string name)
-        {
-            name = name ?? string.Empty;
-            if (!string.IsNullOrEmpty(name)
-                && _parkPalettes.FindIndex(p => string.Equals(p.Name, name,
-                    StringComparison.Ordinal)) < 0) return;
-            _selectedParkPalette = name;
-            Publish();
-            World.GetOrCreateSystemManaged<ParkToolSystem>()
-                .RefreshDecorationPlan();
-        }
-
+        /// <summary>Each park seed draws one Vanilla park style.</summary>
         private VanillaParkPalette ResolveParkPalette(int seed)
-        {
-            if (!string.IsNullOrEmpty(_selectedParkPalette))
-            {
-                var selected = _parkPalettes.Find(p => string.Equals(p.Name,
-                    _selectedParkPalette, StringComparison.Ordinal));
-                if (selected != null) return selected;
-            }
-            var index = (int)(unchecked((uint)seed) % (uint)_parkPalettes.Count);
-            return _parkPalettes[index];
-        }
+            => _parkPalettes[(int)(unchecked((uint)seed) % (uint)_parkPalettes.Count)];
 
         internal void Select(string payload)
         {
@@ -451,40 +393,22 @@ namespace ParkManager.Assets
             var mode = modeSplit >= 0 ? remainder.Substring(0, modeSplit) : "single";
             var name = modeSplit >= 0 ? remainder.Substring(modeSplit + 1) : remainder;
             if (!_choices.TryGetValue(category, out var choices)) return;
+            var known = !string.IsNullOrEmpty(name) && FindChoice(choices, name) != null;
             if (string.Equals(mode, "multi", StringComparison.OrdinalIgnoreCase)
                 && IsMultiCategory(category))
             {
+                // An empty name clears the mix; a known name toggles it.
                 var selectedMany = _multiSelected[category];
                 if (string.IsNullOrEmpty(name)) selectedMany.Clear();
-                else if (choices.FindIndex(choice => string.Equals(choice.Name,
-                    name, StringComparison.Ordinal)) >= 0)
-                {
-                    if (!selectedMany.Add(name)) selectedMany.Remove(name);
-                }
-                else return;
+                else if (!known) return;
+                else if (!selectedMany.Add(name)) selectedMany.Remove(name);
                 _selected[category] = string.Empty;
-                Publish();
-                World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .RefreshDecorationPlan();
-                return;
             }
-            if (string.IsNullOrEmpty(name))
-            {
-                _selected[category] = string.Empty;
-                Publish();
-                World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .RefreshDecorationPlan();
-                return;
-            }
-            for (var i = 0; i < choices.Count; i++)
-                if (string.Equals(choices[i].Name, name, StringComparison.Ordinal))
-                {
-                    _selected[category] = name;
-                    Publish();
-                    World.GetOrCreateSystemManaged<ParkToolSystem>()
-                        .RefreshDecorationPlan();
-                    return;
-                }
+            else if (string.IsNullOrEmpty(name) || known)
+                _selected[category] = name;
+            else return;
+            Publish();
+            Tool.RefreshDecorationPlan();
         }
 
         private void Scan()
@@ -494,19 +418,11 @@ namespace ParkManager.Assets
             for (var i = 0; i < entities.Length; i++)
             {
                 var entity = entities[i];
-                if (!_prefabs.TryGetPrefab<PrefabBase>(entity, out var prefab)
-                    || prefab == null
-                    || string.IsNullOrWhiteSpace(prefab.name)) continue;
-                var name = prefab.name;
-
-                if (TryClassifyParkAsset(entity, prefab, out var category))
-                {
-                    Add(category, name, entity);
-                    if (category == ParkAssetCategory.Bush)
-                        Add(ParkAssetCategory.PlazaPlanter, name, entity);
-                }
+                if (_prefabs.TryGetPrefab<PrefabBase>(entity, out var prefab)
+                    && prefab != null && !string.IsNullOrWhiteSpace(prefab.name)
+                    && TryClassifyParkAsset(entity, prefab, out var category))
+                    Add(category, prefab, entity);
             }
-
 
             // Resolve park variants before choosing the supported fence pool.
             ScanVanillaParkPalettes(entities);
@@ -514,9 +430,7 @@ namespace ParkManager.Assets
             // Prefer the native continuous fence system whenever the current
             // game/DLC set exposes it. Prop pieces remain a compatibility
             // fallback for installations without a network fence prefab.
-            var networkFenceCount = _choices[ParkAssetCategory.Fence]
-                .FindAll(choice => IsNetworkFence(choice.Prefab)).Count;
-            if (networkFenceCount > 0)
+            if (HasNetworkFence())
                 _choices[ParkAssetCategory.Fence]
                     .RemoveAll(choice => !IsNetworkFence(choice.Prefab));
 
@@ -533,22 +447,15 @@ namespace ParkManager.Assets
                             StringComparison.Ordinal) && IsUiChoice(choice)) < 0);
             }
 
-            _ready = true;
-            _summary = $"Flächen {_choices[ParkAssetCategory.Surface].Count} · "
-                + $"Bäume {_choices[ParkAssetCategory.Tree].Count} · "
-                + $"Büsche {_choices[ParkAssetCategory.Bush].Count} · "
-                + $"Bänke {_choices[ParkAssetCategory.Bench].Count} · "
-                + $"Lampen {_choices[ParkAssetCategory.Lamp].Count} · "
-                + $"Zäune {_choices[ParkAssetCategory.Fence].Count} · "
-                + $"Mülleimer {_choices[ParkAssetCategory.TrashBin].Count} · "
-                + $"Plazazentren {_choices[ParkAssetCategory.PlazaCenter].Count} · "
-                + $"Parkpaletten {_parkPalettes.Count}";
-            Mod.Log.Info($"ParkManager {Mod.Version} asset catalog: {_summary}");
-            foreach (ParkAssetCategory category in Enum.GetValues(
-                typeof(ParkAssetCategory)))
-                Mod.Log.Info($"ParkManager default {category}: "
-                    + (_selected.TryGetValue(category, out var selected)
-                        ? selected : "(none)"));
+            var summary = new StringBuilder();
+            foreach (var pair in _choices)
+                summary.Append(pair.Key).Append(' ').Append(pair.Value.Count)
+                    .Append(" · ");
+            Mod.Log.Info($"ParkManager {Mod.Version} asset catalog: {summary}"
+                + $"park palettes {_parkPalettes.Count}");
+            foreach (var pair in _selected)
+                Mod.Log.Info($"ParkManager default {pair.Key}: "
+                    + (string.IsNullOrEmpty(pair.Value) ? "(none)" : pair.Value));
             Publish();
         }
 
@@ -582,10 +489,9 @@ namespace ParkManager.Assets
                 || prefab.TryGet<ObjectSubObjects>(out var subObjects)
                     && subObjects?.m_SubObjects != null
                     && subObjects.m_SubObjects.Length > 0
+                || ContainsAny(lowerName, PlanterNames)
                 || ContainsAny(lowerName, "placeholder", "random", "source",
-                    "effect", "particle", "spray", "splash", "decal",
-                    "planter", "flowerpot", "flower pot", "raisedbed",
-                    "raised bed", "plantbox", "plant box", "bench", "seat",
+                    "effect", "particle", "spray", "splash", "decal", "bench", "seat",
                     "lamp", "light", "trash", "bin", "fence", "railing",
                     "sign", "poster", "icon", "shadow", "broken", "ruin"))
                 return false;
@@ -610,8 +516,7 @@ namespace ParkManager.Assets
                 CollectManagedSubObjects(park, palette, visited, 0);
                 foreach (var pair in palette.Choices)
                     SortAndDeduplicate(pair.Value);
-                if (_choices[ParkAssetCategory.Fence]
-                    .Exists(choice => IsNetworkFence(choice.Prefab)))
+                if (HasNetworkFence())
                     palette.Choices[ParkAssetCategory.Fence]
                         .RemoveAll(choice => !IsNetworkFence(choice.Prefab));
 
@@ -624,11 +529,6 @@ namespace ParkManager.Assets
             }
             _parkPalettes.Sort((a, b) => StringComparer.OrdinalIgnoreCase
                 .Compare(a.Name, b.Name));
-            if (!string.IsNullOrEmpty(_selectedParkPalette)
-                && _parkPalettes.FindIndex(p => string.Equals(p.Name,
-                    _selectedParkPalette, StringComparison.Ordinal)) < 0)
-                _selectedParkPalette = string.Empty;
-            _parkPaletteOptionsJson = BuildParkPaletteOptionsJson();
             Mod.Log.Info($"ParkManager discovered {_parkPalettes.Count} "
                 + "Vanilla park palettes from ObjectSubObjects.");
         }
@@ -665,18 +565,10 @@ namespace ParkManager.Assets
 
             if (!_prefabs.TryGetPrefab<PrefabBase>(entity, out var prefab)
                 || prefab == null || string.IsNullOrWhiteSpace(prefab.name)) return;
-            if (!string.IsNullOrWhiteSpace(GetIcon(prefab))
-                && TryClassifyParkAsset(entity, prefab, out var category))
+            if (TryClassifyParkAsset(entity, prefab, out var category))
             {
-                Add(category, prefab.name, entity);
-                if (category == ParkAssetCategory.Bush)
-                    Add(ParkAssetCategory.PlazaPlanter, prefab.name, entity);
-                palette.Choices[category].Add(new ParkAssetChoice
-                {
-                    Name = prefab.name,
-                    Icon = GetIcon(prefab),
-                    Prefab = entity,
-                });
+                var choice = Add(category, prefab, entity);
+                if (choice != null) palette.Choices[category].Add(choice);
             }
             CollectManagedSubObjects(prefab, palette, visited, depth);
         }
@@ -715,8 +607,8 @@ namespace ParkManager.Assets
                 "trash can", "wastebin", "waste bin", "garbagebin",
                 "garbage bin", "litterbin", "litter bin"))
                 category = ParkAssetCategory.TrashBin;
-            else if (ContainsAny(lower, "planter", "flowerbed", "flower bed",
-                "flowerpot", "flower pot", "raisedbed", "raised bed", "plantbox", "plant box"))
+            else if (ContainsAny(lower, PlanterNames)
+                || ContainsAny(lower, "flowerbed", "flower bed"))
                 category = ParkAssetCategory.PlazaPlanter;
             else if (IsPlazaCenterPrefab(entity, prefab, lower))
                 category = ParkAssetCategory.PlazaCenter;
@@ -738,9 +630,7 @@ namespace ParkManager.Assets
             if (EntityManager.HasComponent<PlantData>(entity))
             {
                 var lower = prefab.name.ToLowerInvariant();
-                // Composite planters retain their dedicated placement category.
-                if (ContainsAny(lower, "planter", "flowerpot", "flower pot",
-                    "raisedbed", "raised bed", "plantbox", "plant box"))
+                if (ContainsAny(lower, PlanterNames))
                     category = ParkAssetCategory.PlazaPlanter;
                 else if (EntityManager.HasComponent<TreeData>(entity))
                 {
@@ -802,19 +692,27 @@ namespace ParkManager.Assets
                 "commercial", "logo", "screen", "adboard");
         }
 
-        private void Add(ParkAssetCategory category, string name, Entity prefab)
+        /// <summary>
+        /// Adds a classified prefab to the catalog. Bushes double as plaza
+        /// planters. Prefabs without a preview are skipped here, in the source
+        /// catalog, so automatic placement cannot select assets the manual
+        /// picker would hide.
+        /// </summary>
+        private ParkAssetChoice Add(ParkAssetCategory category, PrefabBase prefab,
+            Entity entity)
         {
-            var icon = _prefabs.TryGetPrefab<PrefabBase>(prefab, out var value)
-                ? GetIcon(value) : string.Empty;
-            // Apply to the source catalog so automatic placement cannot select
-            // assets that the manual picker excludes for lacking a preview.
-            if (string.IsNullOrWhiteSpace(icon)) return;
-            _choices[category].Add(new ParkAssetChoice
+            var icon = GetIcon(prefab);
+            if (string.IsNullOrWhiteSpace(icon)) return null;
+            var choice = new ParkAssetChoice
             {
-                Name = name,
+                Name = prefab.name,
                 Icon = icon,
-                Prefab = prefab,
-            });
+                Prefab = entity,
+            };
+            _choices[category].Add(choice);
+            if (category == ParkAssetCategory.Bush)
+                _choices[ParkAssetCategory.PlazaPlanter].Add(choice);
+            return choice;
         }
 
         private static string GetIcon(PrefabBase prefab)
@@ -894,23 +792,21 @@ namespace ParkManager.Assets
                 if (!firstCategory) builder.Append(',');
                 firstCategory = false;
                 var key = category.ToString().ToLowerInvariant();
-                builder.Append('"').Append(key).Append("\":{");
-                builder.Append("\"selected\":\"")
-                    .Append(Escape(_selected.TryGetValue(category, out var value)
-                        ? value : string.Empty)).Append("\",\"selectedMany\":[");
+                builder.Append('"').Append(key).Append("\":{\"selected\":");
+                Json.AppendString(builder, _selected.TryGetValue(category,
+                    out var value) ? value : string.Empty);
+                builder.Append(",\"selectedMany\":[");
                 var selectedMany = _multiSelected[category];
-                var selectedManyWritten = 0;
-                var categoryChoices = _choices[category];
-                for (var i = 0; i < categoryChoices.Count; i++)
-                {
-                    if (!selectedMany.Contains(categoryChoices[i].Name)) continue;
-                    if (selectedManyWritten++ > 0) builder.Append(',');
-                    builder.Append('"').Append(Escape(categoryChoices[i].Name))
-                        .Append('"');
-                }
-                builder.Append("],\"options\":[");
                 var choices = _choices[category];
                 var written = 0;
+                for (var i = 0; i < choices.Count; i++)
+                {
+                    if (!selectedMany.Contains(choices[i].Name)) continue;
+                    if (written++ > 0) builder.Append(',');
+                    Json.AppendString(builder, choices[i].Name);
+                }
+                builder.Append("],\"options\":[");
+                written = 0;
 
                 // The catalog order is stable. Selection is represented only
                 // by selected/selectedMany and never moves a tile in the UI.
@@ -935,14 +831,9 @@ namespace ParkManager.Assets
         private static void AppendChoiceJson(StringBuilder builder,
             ParkAssetChoice choice)
         {
-            if (choice == null)
-            {
-                builder.Append("{\"name\":\"\",\"icon\":\"\"}");
-                return;
-            }
-            builder.Append("{\"name\":\"").Append(Escape(choice.Name))
-                .Append("\",\"icon\":\"").Append(Escape(choice.Icon))
-                .Append("\"}");
+            builder.Append("{\"name\":");
+            Json.AppendString(builder, choice.Name).Append(",\"icon\":");
+            Json.AppendString(builder, choice.Icon).Append('}');
         }
 
         private static bool IsUiChoice(ParkAssetChoice choice)
@@ -950,31 +841,29 @@ namespace ParkManager.Assets
                 && !string.IsNullOrWhiteSpace(choice.Name)
                 && !string.IsNullOrWhiteSpace(choice.Icon);
 
-        private string BuildParkPaletteOptionsJson()
-        {
-            var builder = new StringBuilder("[");
-            var count = Math.Min(_parkPalettes.Count, MaximumParkPaletteOptions);
-            for (var i = 0; i < count; i++)
-            {
-                if (i > 0) builder.Append(',');
-                builder.Append('"').Append(Escape(_parkPalettes[i].Name)).Append('"');
-            }
-            return builder.Append(']').ToString();
-        }
-
         private void Publish()
         {
-            var optionsJson = BuildOptionsJson();
             World.GetOrCreateSystemManaged<ParkManagerUISystem>()
-                .SetAssetCatalogState(_ready, _summary, optionsJson,
-                    _parkPaletteOptionsJson, _selectedParkPalette);
-            World.GetOrCreateSystemManaged<ParkToolSystem>()
-                .RefreshPlazaCenterChoices(true);
+                .SetAssetOptions(BuildOptionsJson());
+            // The tool filters centerpieces by the current outline.
+            Tool.RefreshPlazaCenterChoices(true);
         }
 
-        private static string Escape(string value) => (value ?? string.Empty)
-            .Replace("\\", "\\\\").Replace("\"", "\\\"")
-            .Replace("\r", "\\r").Replace("\n", "\\n");
+        private ParkToolSystem Tool => World.GetOrCreateSystemManaged<ParkToolSystem>();
+
+        private static ParkAssetChoice FindChoice(List<ParkAssetChoice> choices,
+            string name)
+            => choices.Find(choice => string.Equals(choice.Name, name,
+                StringComparison.Ordinal));
+
+        /// <summary>Resolves a catalog entry to its live prefab entity.</summary>
+        private bool TryUse(ParkAssetChoice choice, out Entity prefab,
+            out string name)
+        {
+            prefab = choice?.Prefab ?? Entity.Null;
+            name = choice?.Name ?? string.Empty;
+            return prefab != Entity.Null && EntityManager.Exists(prefab);
+        }
 
         private static bool ContainsAny(string value, params string[] parts)
         {

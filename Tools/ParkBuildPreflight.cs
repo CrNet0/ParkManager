@@ -1,6 +1,4 @@
-using System;
 using System.Collections.Generic;
-using Colossal.Collections;
 using Colossal.Mathematics;
 using Game.Common;
 using Game.Net;
@@ -56,10 +54,11 @@ namespace ParkManager.Tools
                     var world = new float3(point.x, 0f, point.y);
                     world.y = TerrainUtils.SampleHeight(ref terrain, world);
                     if (!math.isfinite(world.y))
-                        return RejectBuildSite(world, "Terrainhöhe nicht verfügbar", out reason);
+                        return RejectBuildSite(world,
+                            UiText.Of("preflight.terrainMissing"), out reason);
                     if (step > 0 && math.abs(world.y - previousHeight)
                         / math.max(0.1f, length / steps) > MaximumPathGrade)
-                        NoteBuildWarning(world, "Weg stark geneigt", out reason);
+                        NoteBuildWarning(world, UiText.Of("preflight.pathSteep"), out reason);
                     previousHeight = world.y;
 
                     var radius = math.max(ObstacleClearance, edge.Width * 0.5f);
@@ -86,7 +85,7 @@ namespace ParkManager.Tools
                         if (NearEntrance(point, GateRoadExemption)
                             && EntityManager.HasComponent<Game.Net.Road>(entity))
                             continue;
-                        NoteBuildWarning(world, "bestehendes Netz in der Nähe", out reason);
+                        NoteBuildWarning(world, UiText.Of("preflight.netNearby"), out reason);
                     }
 
                     seenObjects.Clear();
@@ -121,7 +120,8 @@ namespace ParkManager.Tools
                         if (math.any(math.abs(point - center) > size + radius)) continue;
                         NoteBuildWarning(world,
                             EntityManager.HasComponent<BuildingData>(prefab)
-                                ? "Gebäude in der Nähe" : "Objekt in der Nähe", out reason);
+                                ? UiText.Of("preflight.buildingNearby")
+                                : UiText.Of("preflight.objectNearby"), out reason);
                     }
                 }
             }
@@ -132,14 +132,9 @@ namespace ParkManager.Tools
             var hubWorld = new float3(hub.x, 0f, hub.y);
             hubWorld.y = TerrainUtils.SampleHeight(ref terrain, hubWorld);
             if (!math.isfinite(hubWorld.y))
-                return RejectBuildSite(hubWorld, "Terrainhöhe nicht verfügbar", out reason);
-            var min = _points[0];
-            var max = _points[0];
-            for (var i = 1; i < _points.Count; i++)
-            {
-                min = math.min(min, _points[i]);
-                max = math.max(max, _points[i]);
-            }
+                return RejectBuildSite(hubWorld, UiText.Of("preflight.terrainMissing"),
+                    out reason);
+            PolygonMath.Bounds(_points, out var min, out var max);
             var surfaceStep = math.max(8f,
                 math.sqrt(math.max(1f, (max.x - min.x) * (max.y - min.y))) / 64f);
             for (var z = min.y; z <= max.y; z += surfaceStep)
@@ -150,7 +145,8 @@ namespace ParkManager.Tools
                 var world = new float3(x, 0f, z);
                 world.y = TerrainUtils.SampleHeight(ref terrain, world);
                 if (!math.isfinite(world.y))
-                    return RejectBuildSite(world, "Terrainhöhe nicht verfügbar", out reason);
+                    return RejectBuildSite(world, UiText.Of("preflight.terrainMissing"),
+                        out reason);
                 var east = point + new float2(surfaceStep, 0f);
                 var north = point + new float2(0f, surfaceStep);
                 var eastGrade = PointInside(east)
@@ -158,9 +154,10 @@ namespace ParkManager.Tools
                 var northGrade = PointInside(north)
                     ? SurfaceGrade(point, north, world.y, ref terrain) : 0f;
                 if (!math.isfinite(eastGrade) || !math.isfinite(northGrade))
-                    return RejectBuildSite(world, "Terrainhöhe nicht verfügbar", out reason);
+                    return RejectBuildSite(world, UiText.Of("preflight.terrainMissing"),
+                        out reason);
                 if (eastGrade > MaximumSurfaceGrade || northGrade > MaximumSurfaceGrade)
-                    NoteBuildWarning(world, "Parkfläche stark geneigt", out reason);
+                    NoteBuildWarning(world, UiText.Of("preflight.surfaceSteep"), out reason);
             }
             for (var i = 0; i < _points.Count; i++)
             {
@@ -169,10 +166,11 @@ namespace ParkManager.Tools
                 if (distance < 0.1f) continue;
                 var sample = new float3(vertex.x, 0f, vertex.y);
                 sample.y = TerrainUtils.SampleHeight(ref terrain, sample);
-                if (!math.isfinite(sample.y) || !math.isfinite(hubWorld.y))
-                    return RejectBuildSite(sample, "Terrainhöhe nicht verfügbar", out reason);
+                if (!math.isfinite(sample.y))
+                    return RejectBuildSite(sample,
+                        UiText.Of("preflight.terrainMissing"), out reason);
                 if (math.abs(sample.y - hubWorld.y) / distance > MaximumSurfaceGrade)
-                    NoteBuildWarning(sample, "Parkfläche stark geneigt", out reason);
+                    NoteBuildWarning(sample, UiText.Of("preflight.surfaceSteep"), out reason);
             }
             return true;
         }
@@ -191,7 +189,7 @@ namespace ParkManager.Tools
             out string reason)
         {
             _buildIssues.Add(position);
-            reason = $"Bauprüfung: {problem} bei X {position.x:F0}, Z {position.z:F0}.";
+            reason = UiText.Of("preflight.rejected", problem, position.x, position.z);
             Mod.Log.Warn($"ParkManager preflight rejected seed "
                 + $"{_decorationPlan?.Seed ?? _pathPlan.Seed}: "
                 + reason);
@@ -207,8 +205,7 @@ namespace ParkManager.Tools
                 reason = _preflightWarning;
                 return;
             }
-            reason = $"Hinweis: {problem} bei X {position.x:F0}, Z {position.z:F0}. "
-                + "Bau wird trotzdem versucht.";
+            reason = UiText.Of("preflight.warning", problem, position.x, position.z);
             _preflightWarning = reason;
             Mod.Log.Info($"ParkManager advisory preflight seed "
                 + $"{_decorationPlan?.Seed ?? _pathPlan.Seed}: {reason}");
@@ -256,7 +253,7 @@ namespace ParkManager.Tools
                         .m_Position.xz;
                     if (math.any(math.abs(point - center) > size + radius)) continue;
                     NoteBuildWarning(new float3(point.x, 0f, point.y),
-                        "vorhandenes Objekt an Ausstattungsposition", out reason);
+                        UiText.Of("preflight.objectAtFurnishing"), out reason);
                 }
             }
             return true;

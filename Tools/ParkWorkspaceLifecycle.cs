@@ -1,4 +1,3 @@
-using Game.Common;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -18,10 +17,10 @@ namespace ParkManager.Tools
         /// <summary>Commits both previews from the final wizard step.</summary>
         internal void BuildPark()
         {
-            if (PathBuildBusy || DecorationBuildBusy || DecorationEditingLocked) return;
+            if (BuildBusy || DecorationEditingLocked) return;
             if (_pathPlan == null || _decorationPlan == null)
             {
-                PublishState("Zuerst Untergrund und Ausstattung planen.");
+                PublishState(UiText.Of("status.planSurfaceAndDecorationsFirst"));
                 return;
             }
             Mod.Log.Info($"ParkManager BUILD-START type={_selectedSiteKind} "
@@ -45,34 +44,24 @@ namespace ParkManager.Tools
         /// </summary>
         internal void FinishPark()
         {
-            if (PathBuildBusy || DecorationBuildBusy)
+            if (BuildBusy)
             {
-                PublishState("Park kann erst nach Abschluss des Bauvorgangs fertiggestellt werden.");
+                PublishState(UiText.Of("status.finishAfterBuild"));
                 return;
             }
             if (!HasBuiltPaths)
             {
-                PublishState("Es ist kein gebauter Park zum Fertigstellen aktiv.");
+                PublishState(UiText.Of("status.noParkToFinish"));
                 return;
             }
 
             var finishedRecord = _lastBuildRecord;
-            if (EntityManager.HasComponent<ParkCompletedBundle>(finishedRecord))
-                EntityManager.SetComponentData(finishedRecord,
-                    new ParkCompletedBundle
-                    {
-                        Version = ParkCompletedBundle.CurrentVersion,
-                    });
-            else EntityManager.AddComponentData(finishedRecord,
-                new ParkCompletedBundle
-                {
-                    Version = ParkCompletedBundle.CurrentVersion,
-                });
+            MarkCompleted(finishedRecord);
             _lastBuildRecord = Entity.Null;
             ResetWorkspaceDraft();
-            PublishState("Park fertiggestellt. Zeichne den Umriss für den nächsten Park.");
-            PublishPathBuildState("Neuer Park · noch keine Wege gebaut.");
-            PublishDecorationState("Neuer Park · noch keine Ausstattung geplant.");
+            PublishState(UiText.Of("status.parkFinished"));
+            PublishPathBuildState(UiText.Of("path.newPark"));
+            PublishDecorationState(UiText.Of("decoration.newPark"));
             Mod.Log.Info($"ParkManager finalized park {finishedRecord}.");
         }
 
@@ -104,7 +93,7 @@ namespace ParkManager.Tools
 
         private void MonitorExternalPathEdits(bool force = false)
         {
-            if (PathBuildBusy || DecorationBuildBusy) return;
+            if (BuildBusy) return;
             if (!HasBuiltPaths) return;
             if (!EntityManager.HasComponent<ParkEditableBuildState>(
                     _lastBuildRecord)) return;
@@ -123,10 +112,9 @@ namespace ParkManager.Tools
             EntityManager.SetComponentData(_lastBuildRecord, state);
             var seed = EntityManager.GetComponentData<ParkPathBuildMarker>(
                 _lastBuildRecord).Seed;
-            PublishState("Der gebaute Park wurde mit einem externen Werkzeug verändert. "
-                + "ParkManager behält diese Änderungen und überschreibt sie nicht.");
-            PublishPathBuildState($"Manuell bearbeitet · {count} von "
-                + $"{state.MemberCount} Elementen · Seed {seed}");
+            PublishState(UiText.Of("status.externallyEdited"));
+            PublishPathBuildState(UiText.Of("path.manuallyEdited", count,
+                state.MemberCount, seed));
             Mod.Log.Info($"ParkManager detected external edits on build {_lastBuildRecord}: "
                 + $"members {state.MemberCount}->{count}, hash {state.GeometryHash}->{hash}.");
         }

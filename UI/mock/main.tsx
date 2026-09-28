@@ -23,6 +23,9 @@ const speciesColors = ['#68cb74', '#2f8f4e', '#a3d65c', '#4fb3a0'];
 const icon = (letter: string, color: string) => `data:image/svg+xml,${encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="8" fill="${color}"/><text x="32" y="43" text-anchor="middle" fill="white" font-size="33" font-family="Arial">${letter}</text></svg>`)}`;
 const choices: Record<string, any> = {};
+// One UI action can trigger several overlapping plan requests (e.g. choosing
+// a fence selects the asset, then enables the fence); only the newest may win.
+let latestPlanRequest = 0;
 for (const [key, label, color] of [
   ['surface', 'Gras', '#50965a'], ['tree', 'Baum', '#2c9d4a'],
   ['bush', 'Busch', '#629945'], ['plazaplanter', 'Pflanzkasten', '#77934d'],
@@ -68,6 +71,7 @@ function App() {
         { x: 200, y: 180 }, { x: 700, y: 180 },
         { x: 700, y: 500 }, { x: 200, y: 500 } ];
       const gates = entrances.length ? entrances : [{ x: 450, y: 180 }];
+      const request = ++latestPlanRequest;
       try {
         const response = await fetch('/api/plan', { method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -86,9 +90,11 @@ function App() {
             furnitureDensity: get('FurnitureDensity'),
             enabledMask: get('DecorationEnabledMask') }) });
         const result = await response.json() as LivePlan;
+        if (request !== latestPlanRequest) return;
         if (!response.ok || result.error) throw new Error(result.error || `HTTP ${response.status}`);
         setLivePlan(result); setPlanError('');
       } catch (error) {
+        if (request !== latestPlanRequest) return;
         setLivePlan(null);
         setPlanError(`Live-Planung nicht erreichbar: ${error}`);
       }
@@ -144,6 +150,14 @@ function App() {
         set('PathBuildStatus', 'error');
         set('PathBuildSummary', 'Validation failed: selected area is blocked.');
       }}>Fehlerstatus testen</button>
+      <button onClick={() => {
+        // Same wire format as Tools/UiText.cs, including a nested message.
+        set('PathBuildStatus', 'warning');
+        set('PathBuildSummary', JSON.stringify({ k: 'preflight.warning',
+          a: [{ k: 'preflight.pathSteep', a: [] }, 12.4, -0.2] }));
+      }}>Meldungsschlüssel testen</button>
+      <button onClick={() => set('Locale', get('Locale') === 'de' ? 'en' : 'de')}>
+        Sprache wechseln</button>
       <label>Batch-Bericht öffnen <input type="file" accept=".json" hidden
         onChange={(event) => loadReport(event.target.files?.[0])} /></label>
     </div>

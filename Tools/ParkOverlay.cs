@@ -41,7 +41,7 @@ namespace ParkManager.Tools
         internal static void Draw(OverlayRenderSystem.Buffer buffer,
             IReadOnlyList<float3> polygon, bool closed, bool hasCursor,
             float3 cursor, bool canClose, int hoverPoint, int dragPoint,
-            int hoverEdge, int dragEdge, bool plannerMode,
+            int hoverEdge, bool plannerMode,
             IReadOnlyList<float3> entrances, int hoverEntrance,
             IReadOnlyList<float3> pathPreview, ParkDecorationPlan decorations,
             bool plaza,
@@ -72,10 +72,9 @@ namespace ParkManager.Tools
                         canClose ? polygon[0] : cursor),
                     0.4f, 2.5f, 1.5f);
 
-            var edge = dragEdge >= 0 ? dragEdge : hoverEdge;
-            if (closed && edge >= 0 && edge < polygon.Count)
-                Line(buffer, Active, polygon[edge],
-                    polygon[(edge + 1) % polygon.Count], 1.05f);
+            if (closed && hoverEdge >= 0 && hoverEdge < polygon.Count)
+                Line(buffer, Active, polygon[hoverEdge],
+                    polygon[(hoverEdge + 1) % polygon.Count], 1.05f);
 
             for (var i = 0; i < polygon.Count; i++)
             {

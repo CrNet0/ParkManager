@@ -167,11 +167,7 @@ namespace ParkManager.Tools
                         reference = component[i];
                     }
                 if (anchorCount >= 2) continue;
-                if (anchorCount == 0)
-                {
-                    anchors[reference] = true;
-                    anchorCount = 1;
-                }
+                if (anchorCount == 0) anchors[reference] = true;
 
                 var farthest = reference;
                 var farthestDistance = -1f;
@@ -263,28 +259,11 @@ namespace ParkManager.Tools
             for (var sample = 0; sample <= 32; sample++)
             {
                 var point = MathUtils.Position(curve, sample / 32f).xz;
-                if (!PointInsideOrNearPark(point)) return false;
+                // Half a metre of tolerance keeps edge-hugging paths valid.
+                if (!PolygonMath.PointInsideOrBoundary(point, _points, 0.25f))
+                    return false;
             }
             return true;
-        }
-
-        private bool PointInsideOrNearPark(float2 point)
-        {
-            var inside = false;
-            for (int i = 0, j = _points.Count - 1; i < _points.Count; j = i++)
-            {
-                var a = _points[j];
-                var b = _points[i];
-                var ab = b - a;
-                var length = math.lengthsq(ab);
-                var t = length < 0.0001f ? 0f
-                    : math.clamp(math.dot(point - a, ab) / length, 0f, 1f);
-                if (math.distancesq(point, a + ab * t) <= 0.25f) return true;
-                if ((a.y > point.y) != (b.y > point.y)
-                    && point.x < (b.x - a.x) * (point.y - a.y)
-                       / (b.y - a.y) + a.x) inside = !inside;
-            }
-            return inside;
         }
 
         private static float ApproximateCurveLength(Bezier4x3 curve)

@@ -126,6 +126,22 @@ test('path notices use explicit status and plazas call the step Structure', asyn
   await expect(notice).toHaveText('Validation failed: selected area is blocked.');
 });
 
+test('message keys from the game are translated for the active language', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'plaza', exact: true }).click();
+  await page.getByRole('button', { name: 'Meldungsschlüssel testen' }).click();
+  const notice = page.getByRole('alert');
+  await expect(notice).toHaveAttribute('data-status', 'warning');
+  await expect(notice).toHaveText(
+    'Hinweis: Weg stark geneigt bei X 12, Z 0. Bau wird trotzdem versucht.');
+  await page.getByRole('button', { name: 'Sprache wechseln' }).click();
+  await expect(notice).toHaveText('Note: steep path at X 12, Z 0. Building anyway.');
+  await page.getByRole('button', { name: 'Sprache wechseln' }).click();
+  await page.getByRole('button', { name: 'Fehlerstatus testen' }).click();
+  // Plain text (older builds, mock values) is still shown verbatim.
+  await expect(notice).toHaveText('Validation failed: selected area is blocked.');
+});
+
 test('a plaza can be drawn, configured, built, furnished, and finished', async ({ page }) => {
   await page.goto('/');
   await expectNoPanelHeadingOrStageCounter(page);

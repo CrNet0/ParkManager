@@ -106,7 +106,7 @@ namespace ParkManager.Geometry
                     entrancePoints.Count, spacing);
 
                 var graph = new double[nodes.Count, nodes.Count];
-                ConnectTriangleDualGraph(graph, nodes, triangles, polygon, seed);
+                ConnectTriangleDualGraph(graph, nodes, triangles, seed);
                 ConnectInteriorRoadmap(graph, nodes, polygon, entrancePoints.Count, spacing, seed);
                 ConnectTerminals(graph, nodes, polygon, entrancePoints.Count,
                     gateApproaches, seed);
@@ -344,28 +344,27 @@ namespace ParkManager.Geometry
         }
 
         private static void ConnectTriangleDualGraph(double[,] graph, IReadOnlyList<Node> nodes,
-            IReadOnlyList<Triangle> triangles, IReadOnlyList<float2> polygon, int seed)
+            IReadOnlyList<Triangle> triangles, int seed)
         {
             var owners = new Dictionary<long, int>();
             for (var i = 0; i < triangles.Count; i++)
             {
                 var triangle = triangles[i];
                 ConnectTriangleEdge(owners, triangle.A, triangle.B, triangle.NodeIndex,
-                    graph, nodes, polygon, seed);
+                    graph, nodes, seed);
                 ConnectTriangleEdge(owners, triangle.B, triangle.C, triangle.NodeIndex,
-                    graph, nodes, polygon, seed);
+                    graph, nodes, seed);
                 ConnectTriangleEdge(owners, triangle.C, triangle.A, triangle.NodeIndex,
-                    graph, nodes, polygon, seed);
+                    graph, nodes, seed);
             }
         }
 
         private static void ConnectTriangleEdge(Dictionary<long, int> owners, int a, int b,
-            int node, double[,] graph, IReadOnlyList<Node> nodes,
-            IReadOnlyList<float2> polygon, int seed)
+            int node, double[,] graph, IReadOnlyList<Node> nodes, int seed)
         {
             var key = EdgeKey(a, b);
             if (owners.TryGetValue(key, out var neighbour))
-                Connect(graph, nodes, node, neighbour, polygon, false, seed);
+                Connect(graph, nodes, node, neighbour, false, seed);
             else
                 owners[key] = node;
         }
@@ -393,7 +392,7 @@ namespace ParkManager.Geometry
                     if (!SegmentInsidePolygon(nodes[source].Position, nodes[target].Position,
                             polygon, false))
                         continue;
-                    Connect(graph, nodes, source, target, polygon, false, seed);
+                    Connect(graph, nodes, source, target, false, seed);
                     connected++;
                 }
             }
@@ -407,7 +406,7 @@ namespace ParkManager.Geometry
             {
                 if (terminal < gateApproaches.Count && gateApproaches[terminal] >= 0)
                 {
-                    Connect(graph, nodes, terminal, gateApproaches[terminal], polygon,
+                    Connect(graph, nodes, terminal, gateApproaches[terminal],
                         true, seed);
                     continue;
                 }
@@ -433,14 +432,14 @@ namespace ParkManager.Geometry
                     if (!SegmentInsidePolygon(nodes[terminal].Position, nodes[target].Position,
                             polygon, true))
                         continue;
-                    Connect(graph, nodes, terminal, target, polygon, true, seed);
+                    Connect(graph, nodes, terminal, target, true, seed);
                     connected++;
                 }
             }
         }
 
         private static void Connect(double[,] graph, IReadOnlyList<Node> nodes, int a, int b,
-            IReadOnlyList<float2> polygon, bool gateConnector, int seed)
+            bool gateConnector, int seed)
         {
             var distance = Distance(nodes[a].Position, nodes[b].Position);
             if (distance <= 0.01) return;

@@ -22,34 +22,18 @@ import { AssetCatalog } from "./components/AssetCatalog";
 import { PathSettings } from "./components/PathSettings";
 import { PlazaFenceSelector } from "./components/PlazaFenceSelector";
 import { PlazaArrangementEditor } from "./components/PlazaArrangementEditor";
+import { NO_PLAZA_CENTER, parsePlazaCenterOptions,
+  PlazaCenterSelector } from "./components/PlazaCenterSelector";
+import { AssetTileGroup } from "./components/AssetTileGroup";
 import { SnapControls, StatePill } from "./components/WorkflowParts";
 import { getTexts } from "./i18n";
 import arrowRightIcon from "./assets/arrow-right.svg";
 import brandLogo from "./assets/park-manager.svg";
 import styles from "./panel.module.less";
 import { deriveWorkflowModel } from "./workflow";
+import { formatUiText, parseUiText } from "./uiText";
 
 const stop = (event: any) => event.stopPropagation();
-
-type PlazaCenterOption = { name: string; icon: string };
-
-const parsePlazaCenterOptions = (json: string): PlazaCenterOption[] => {
-  try {
-    const parsed = JSON.parse(json);
-    const options = Array.isArray(parsed) ? parsed
-      : Array.isArray(parsed?.options) ? parsed.options : [];
-    return options.map((option: unknown) => typeof option === "string"
-      ? { name: option, icon: "" }
-      : {
-          name: typeof (option as any)?.name === "string"
-            ? (option as any).name : "",
-          icon: typeof (option as any)?.icon === "string"
-            ? (option as any).icon : "",
-        }).filter((option: PlazaCenterOption) => option.name.trim().length > 0);
-  } catch {
-    return [];
-  }
-};
 
 /**
  * Four-step workflow shell. Detailed snapping and asset-selection concerns
@@ -58,9 +42,7 @@ const parsePlazaCenterOptions = (json: string): PlazaCenterOption[] => {
 export const ParkManagerPanel = () => {
   // Hooks stay unconditional: conditional hooks caused React #310 in Cohtml.
   const [activeStage, setActiveStage] = useState(0);
-  const buildMessage = useValue(status$);
-  const [failedSurfaceIcons, setFailedSurfaceIcons] = useState<Record<string, boolean>>({});
-  const [failedCenterIcons, setFailedCenterIcons] = useState<Record<string, boolean>>({});
+  const rawBuildMessage = useValue(status$);
   const [assetTooltip, setAssetTooltip] = useState<{
     name: string; x: number; y: number;
   } | null>(null);
@@ -76,7 +58,7 @@ export const ParkManagerPanel = () => {
   const pathPlanReady = useValue(pathPlanReady$);
   const pathBuildBusy = useValue(pathBuildBusy$);
   const pathBuildPresent = useValue(pathBuildPresent$);
-  const pathBuildSummary = useValue(pathBuildSummary$);
+  const rawPathBuildSummary = useValue(pathBuildSummary$);
   const pathBuildStatus = useValue(pathBuildStatus$);
   const pathType = useValue(pathType$);
   const siteType = useValue(siteType$);
@@ -92,7 +74,7 @@ export const ParkManagerPanel = () => {
   const furnitureDensity = useValue(furnitureDensity$);
   const decorationEnabledMask = useValue(decorationEnabledMask$);
   const decorationPlanReady = useValue(decorationPlanReady$);
-  const decorationSummary = useValue(decorationSummary$);
+  const rawDecorationSummary = useValue(decorationSummary$);
   const decorationBuildBusy = useValue(decorationBuildBusy$);
   const decorationBuildPresent = useValue(decorationBuildPresent$);
   const assetChoices = parseAssetChoices(useValue(assetOptionsJson$));
@@ -101,6 +83,14 @@ export const ParkManagerPanel = () => {
   const hasSelectedSurface = !!surfaceChoice?.selected
     && visibleSurfaces.some((option) => option.name === surfaceChoice.selected);
   const fenceChoice = assetChoices.fence;
+
+  // The C# systems publish message keys; resolve them for the game language.
+  const buildMessage = formatUiText(rawBuildMessage, t.messages);
+  const pathBuildSummary = formatUiText(rawPathBuildSummary, t.messages);
+  const decorationSummary = formatUiText(rawDecorationSummary, t.messages);
+  const parsedDecorationSummary = parseUiText(rawDecorationSummary);
+  const arrangementDoesNotFit = typeof parsedDecorationSummary !== "string"
+    && parsedDecorationSummary.k === "plaza.arrangementDoesNotFit";
 
   const busy = pathBuildBusy || decorationBuildBusy;
   const workflow = deriveWorkflowModel({ plannerMode, polygonValid: valid,
@@ -113,7 +103,7 @@ export const ParkManagerPanel = () => {
   const pathBuildNotice = pathBuildStatus !== "ok";
   const isPlaza = siteType === 1;
   const workflowSteps = isPlaza ? t.plazaSteps : t.steps;
-  const canPlanPlaza = plazaCenterSelected === "__none__"
+  const canPlanPlaza = plazaCenterSelected === NO_PLAZA_CENTER
     || plazaCenterOptions.some((option) => option.name === plazaCenterSelected);
 
   const selectPlazaFence = (name: string | null) => {
@@ -134,74 +124,28 @@ export const ParkManagerPanel = () => {
       y: Math.max(62, event.clientY - rect.top - 39) });
   };
 
-  const renderSurfaceSelector = (groupTestId: string, choicesTestId: string) => (
-    <section className={`${styles.plazaAssetGroup} ${styles.plazaSurfaceGroup}`}
-      data-testid={groupTestId}>
-      <div className={styles.plazaAssetGroupHeader}
-        data-testid={`${groupTestId}-header`}>
-        <strong>{t.background}</strong>
-      </div>
-      <div className={styles.surfaceChoices} data-testid={choicesTestId}>
-        {visibleSurfaces.map((option) => (
-          <button key={option.name} type="button" aria-label={option.name}
-            aria-pressed={surfaceChoice?.selected === option.name}
-            onMouseEnter={(event) => showAssetTooltip(event, option.name)}
-            onMouseLeave={() => setAssetTooltip(null)}
-            className={surfaceChoice?.selected === option.name
-              ? styles.surfaceChoiceActive : ""}
-            disabled={busy || pathBuildPresent}
-            onClick={() => selectAsset("Surface", option.name)}>
-            {option.icon && !failedSurfaceIcons[option.icon]
-              ? <img src={option.icon} alt=""
-                  onError={() => setFailedSurfaceIcons((current) =>
-                    current[option.icon] ? current
-                      : { ...current, [option.icon]: true })} />
-              : <span className={styles.plazaCenterFallback} aria-hidden="true">
-                  {option.name.charAt(0).toUpperCase()}
-                </span>}
-          </button>
-        ))}
-      </div>
-    </section>
-  );
+  const renderSurfaceSelector = () => {
+    const prefix = isPlaza ? "plaza" : "park";
+    return <AssetTileGroup title={t.background}
+      groupClassName={styles.plazaSurfaceGroup}
+      testIds={{ group: `${prefix}-surface-group`,
+        header: `${prefix}-surface-group-header`,
+        choices: `${prefix}-surface-choices` }}
+      choicesClassName={styles.surfaceChoices} tileClassName=""
+      activeClassName={styles.surfaceChoiceActive}
+      options={visibleSurfaces}
+      isActive={(name) => surfaceChoice?.selected === name}
+      onSelect={(name) => selectAsset("Surface", name)}
+      disabled={busy || pathBuildPresent} onTooltip={showAssetTooltip}
+      onTooltipClose={() => setAssetTooltip(null)} />;
+  };
 
   const renderPlazaAssetSelectors = () => (
     <div className={styles.plazaAssetSelectors} data-testid="plaza-asset-selectors">
-      <section className={`${styles.plazaAssetGroup} ${styles.plazaCenterGroup}`}
-        data-testid="plaza-center-group">
-        <div className={styles.plazaAssetGroupHeader}
-          data-testid="plaza-center-header">
-          <strong>{t.plazaCenter}</strong>
-        </div>
-        <div className={styles.plazaCenterChoices} data-testid="plaza-center-choices">
-          <button type="button" title={t.plazaNoCenter}
-            className={`${styles.plazaCenterChoice} ${plazaCenterSelected === "__none__"
-              ? styles.plazaCenterChoiceActive : ""}`}
-            disabled={busy || pathBuildPresent}
-            aria-pressed={plazaCenterSelected === "__none__"}
-            aria-label={t.plazaNoCenter}
-            onClick={() => selectPlazaCenter("__none__")}>—</button>
-          {plazaCenterOptions.map((option) => {
-            const selected = option.name === plazaCenterSelected;
-            return <button key={option.name} type="button"
-              className={`${styles.plazaCenterChoice} ${selected
-                ? styles.plazaCenterChoiceActive : ""}`}
-              disabled={busy || pathBuildPresent}
-              aria-pressed={selected} aria-label={option.name}
-              onMouseEnter={(event) => showAssetTooltip(event, option.name)}
-              onMouseLeave={() => setAssetTooltip(null)}
-              onClick={() => selectPlazaCenter(option.name)}>
-              {option.icon && !failedCenterIcons[option.icon]
-                ? <img src={option.icon} alt="" onError={() =>
-                  setFailedCenterIcons((current) => ({
-                    ...current, [option.icon]: true }))} />
-                : <span className={styles.plazaCenterFallback} aria-hidden="true">
-                  {option.name.charAt(0).toUpperCase()}
-                </span>}
-            </button>;
-          })}
-        </div>
-      </section>
+      <PlazaCenterSelector t={t} options={plazaCenterOptions}
+        selected={plazaCenterSelected} disabled={busy || pathBuildPresent}
+        onSelect={selectPlazaCenter} onTooltip={showAssetTooltip}
+        onTooltipClose={() => setAssetTooltip(null)} />
       <PlazaFenceSelector t={t} options={fenceChoice?.options ?? []}
         selected={fenceChoice?.selected ?? ""} enabled={plazaFenceEnabled}
         disabled={busy || pathBuildPresent} onSelect={selectPlazaFence}
@@ -272,9 +216,7 @@ export const ParkManagerPanel = () => {
           arrangementPlacement={plazaArrangementPlacement}
           centerpieceSpacing={plazaCenterpieceSpacing}
           arrangementSpacing={plazaArrangementSpacing}
-          surfaceSelector={renderSurfaceSelector(
-            isPlaza ? "plaza-surface-group" : "park-surface-group",
-            isPlaza ? "plaza-surface-choices" : "park-surface-choices")}
+          surfaceSelector={renderSurfaceSelector()}
           onSiteType={setSiteType} onPathType={setPathType}
           onCenterPlacement={setPlazaCenterPlacement}
           onArrangementPlacement={setPlazaArrangementPlacement}
@@ -289,9 +231,8 @@ export const ParkManagerPanel = () => {
       {isPlaza ? <PlazaArrangementEditor t={t} choices={assetChoices}
         busy={busy || decorationBuildPresent}
         density={furnitureDensity} decorationPlanReady={decorationPlanReady}
-        summary={decorationSummary} />
+        notice={arrangementDoesNotFit ? decorationSummary : null} />
         : <AssetCatalog t={t} choices={assetChoices}
-        isPlaza={false}
         busy={busy || decorationBuildPresent}
         vegetationDensity={vegetationDensity}
         furnitureDensity={furnitureDensity}
@@ -321,21 +262,14 @@ export const ParkManagerPanel = () => {
   const renderFooter = () => (
     <div className={styles.panelFooter} data-testid="panel-footer">
       <div className={styles.footerLeft}>
-        {activeStage === 1 ? <button className={styles.backButton}
-          disabled={busy || pathBuildPresent}
-          onClick={() => openStage(0)}>
-          <img className={`${styles.buttonIcon} ${styles.backButtonIcon}`}
-            src={arrowRightIcon} alt="" />{t.editOutline}</button> : null}
-        {activeStage === 2 ? <button className={styles.backButton}
-          disabled={busy} onClick={() => openStage(1)}>
+        {activeStage > 0 ? <button className={styles.backButton}
+          disabled={busy || (activeStage !== 2 && pathBuildPresent)}
+          onClick={() => openStage(activeStage - 1)}>
           <img className={`${styles.buttonIcon} ${styles.backButtonIcon}`}
             src={arrowRightIcon} alt="" />
-          {isPlaza ? t.backToStructure : t.backToSurface}</button> : null}
-        {activeStage === 3 ? <button className={styles.backButton}
-          disabled={busy || pathBuildPresent} onClick={() => openStage(2)}>
-          <img className={`${styles.buttonIcon} ${styles.backButtonIcon}`}
-            src={arrowRightIcon} alt="" />
-          {isPlaza ? t.backToDetails : t.backToFurnishings}</button> : null}
+          {activeStage === 1 ? t.editOutline
+            : activeStage === 2 ? (isPlaza ? t.backToStructure : t.backToSurface)
+              : isPlaza ? t.backToDetails : t.backToFurnishings}</button> : null}
       </div>
       <div className={styles.footerRight}>
         {activeStage === 0 ? <>

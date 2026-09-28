@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Localize status, path and furnishing messages from the game systems: C# now publishes message keys (`Tools/UiText.cs`), and the UI translates them in `i18n.ts`, so English players no longer see German build notices.
+- Move the plaza centerpiece choice into its own `PlazaCenterSelector` component.
+- Keep large parks fully planted: tree, bush, furniture, bin and fence caps are now safety limits far above normal needs (previously 180 trees and 300 bushes regardless of size), and parks above ~70,000 m² get more groves. Vegetation neighbour checks use a spatial grid. Parks below the old limits plan exactly as before.
+- More natural park planting: groves vary in size, elliptical wobbling outline and density, and larger groves receive more trees; the boundary belt alternates clumps of varying depth with open stretches and changes species by section. Tree and bush counts are unchanged.
+- Log the chosen park surface prefab (`BUILD-SURFACE`) at build start.
+- Fix plaza furnishing for unmirrored boundary arrangements: pieces were converted in pairs, so a piece could take its neighbour's kind and an odd last piece was dropped.
+- Fix the plaza "arrangement does not fit" notice, which only appeared with the German game language.
+- Clean up: shared `PolygonMath`, `Seeds` and `Json` helpers replace up to four copies each; one net-course, polygon-area and tile-picker implementation; removed unused UI bindings/triggers (park palette selection, decoration removal), dead parameters, fields and texts. Planner output is unchanged.
+- Mock: ignore stale live-plan responses so overlapping recalculations cannot show an outdated plan.
+
 ## 0.6.0
 
 - Build the complete park or plaza from the final workflow step; preserve previews during navigation.

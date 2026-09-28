@@ -9,6 +9,8 @@
     <Compile Include="Program.cs" />
     <Compile Include="MockServer.cs" />
     <Compile Include="ModLogStub.cs" />
+    <Compile Include="../../Geometry/PolygonMath.cs" Link="PolygonMath.cs" />
+    <Compile Include="../../Geometry/Seeds.cs" Link="Seeds.cs" />
     <Compile Include="../../Geometry/PlazaPlan.cs" Link="PlazaPlan.cs" />
     <Compile Include="../../Geometry/PlazaPlanner.cs" Link="PlazaPlanner.cs" />
     <Compile Include="../../Geometry/PlazaVariantRoller.cs" Link="PlazaVariantRoller.cs" />

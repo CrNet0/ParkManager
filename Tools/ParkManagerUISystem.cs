@@ -29,11 +29,7 @@ namespace ParkManager.Tools
         private ValueBinding<bool> _polygonClosed;
         private ValueBinding<bool> _polygonValid;
         private ValueBinding<string> _status;
-        private ValueBinding<bool> _assetCatalogReady;
-        private ValueBinding<string> _assetCatalogSummary;
         private ValueBinding<string> _assetOptionsJson;
-        private ValueBinding<string> _parkPaletteOptionsJson;
-        private ValueBinding<string> _selectedParkPalette;
         private ValueBinding<bool> _plannerMode;
         private ValueBinding<int> _entranceCount;
         private ValueBinding<bool> _pathPlanReady;
@@ -51,7 +47,6 @@ namespace ParkManager.Tools
         private ValueBinding<string> _plazaCenterOptionsJson;
         private ValueBinding<string> _plazaCenterSelected;
         private ValueBinding<string> _plazaArrangementJson;
-        private ValueBinding<int> _snapMask;
         private ValueBinding<int> _vegetationDensity;
         private ValueBinding<int> _furnitureDensity;
         private ValueBinding<int> _decorationEnabledMask;
@@ -61,6 +56,12 @@ namespace ParkManager.Tools
         private ValueBinding<string> _decorationSummary;
         private ValueBinding<string> _locale;
         private string _lastLocale = "en";
+
+        // Resolved lazily: the tool system itself creates this UI system in
+        // its OnCreate, so resolving it here during OnCreate would recurse.
+        private ParkToolSystem Tool => World.GetOrCreateSystemManaged<ParkToolSystem>();
+        private ParkAssetCatalogSystem Catalog
+            => World.GetOrCreateSystemManaged<ParkAssetCatalogSystem>();
 
         [Preserve]
         protected override void OnCreate()
@@ -79,17 +80,9 @@ namespace ParkManager.Tools
             AddBinding(_polygonValid = new ValueBinding<bool>(
                 Group, "PolygonValid", false));
             AddBinding(_status = new ValueBinding<string>(
-                Group, "Status", "Werkzeug starten, um ein Polygon zu zeichnen."));
-            AddBinding(_assetCatalogReady = new ValueBinding<bool>(
-                Group, "AssetCatalogReady", false));
-            AddBinding(_assetCatalogSummary = new ValueBinding<string>(
-                Group, "AssetCatalogSummary", "Assetkatalog wird aufgebaut …"));
+                Group, "Status", UiText.Of("status.startTool")));
             AddBinding(_assetOptionsJson = new ValueBinding<string>(
                 Group, "AssetOptionsJson", "{}"));
-            AddBinding(_parkPaletteOptionsJson = new ValueBinding<string>(
-                Group, "ParkPaletteOptionsJson", "[]"));
-            AddBinding(_selectedParkPalette = new ValueBinding<string>(
-                Group, "SelectedParkPalette", string.Empty));
             AddBinding(_plannerMode = new ValueBinding<bool>(
                 Group, "PlannerMode", false));
             AddBinding(_entranceCount = new ValueBinding<int>(
@@ -101,7 +94,7 @@ namespace ParkManager.Tools
             AddBinding(_pathBuildPresent = new ValueBinding<bool>(
                 Group, "PathBuildPresent", false));
             AddBinding(_pathBuildSummary = new ValueBinding<string>(
-                Group, "PathBuildSummary", "Noch keine Testwege gebaut."));
+                Group, "PathBuildSummary", UiText.Of("path.noneBuilt")));
             AddBinding(_pathBuildStatus = new ValueBinding<string>(
                 Group, "PathBuildStatus", "ok"));
             AddBinding(_pathType = new ValueBinding<int>(
@@ -124,8 +117,9 @@ namespace ParkManager.Tools
                 Group, "PlazaCenterSelected", string.Empty));
             AddBinding(_plazaArrangementJson = new ValueBinding<string>(
                 Group, "PlazaArrangementJson", "[]"));
-            AddBinding(_snapMask = new ValueBinding<int>(
-                Group, "SnapMask", (int)ParkToolSystem.SupportedSnapKinds));
+            // Snap options offered in the header; constant for this tool.
+            AddBinding(new ValueBinding<int>(Group, "SnapMask",
+                (int)ParkToolSystem.SupportedSnapKinds));
             AddBinding(_vegetationDensity = new ValueBinding<int>(
                 Group, "VegetationDensity", 100));
             AddBinding(_furnitureDensity = new ValueBinding<int>(
@@ -139,93 +133,58 @@ namespace ParkManager.Tools
             AddBinding(_decorationBuildPresent = new ValueBinding<bool>(
                 Group, "DecorationBuildPresent", false));
             AddBinding(_decorationSummary = new ValueBinding<string>(
-                Group, "DecorationSummary", "Noch keine Ausstattung geplant."));
+                Group, "DecorationSummary", UiText.Of("decoration.none")));
             _lastLocale = GetSupportedLocale();
             AddBinding(_locale = new ValueBinding<string>(
                 Group, "Locale", _lastLocale));
-            AddBinding(new TriggerBinding(Group, "TogglePanel",
-                () => _panelOpen.Update(!_panelOpen.value)));
-            AddBinding(new TriggerBinding<bool>(Group, "SetPanelOpen",
-                open => _panelOpen.Update(open)));
+
             AddBinding(new TriggerBinding(Group, "ToggleTool", ToggleTool));
-            AddBinding(new TriggerBinding(Group, "ClearPolygon", ClearPolygon));
-            AddBinding(new TriggerBinding(Group, "RefreshAssetCatalog",
-                () => World.GetOrCreateSystemManaged<ParkAssetCatalogSystem>()
-                    .RequestRefresh()));
+            AddBinding(new TriggerBinding(Group, "ClearPolygon",
+                () => Tool.ClearPolygon()));
             AddBinding(new TriggerBinding<bool>(Group, "SetPlannerMode",
-                enabled => World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .SetPlannerMode(enabled)));
+                enabled => Tool.SetPlannerMode(enabled)));
             AddBinding(new TriggerBinding(Group, "GeneratePaths",
-                () => World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .GeneratePaths()));
+                () => Tool.GeneratePaths()));
             AddBinding(new TriggerBinding(Group, "BuildPark",
-                () => World.GetOrCreateSystemManaged<ParkToolSystem>().BuildPark()));
-            AddBinding(new TriggerBinding(Group, "BuildPaths",
-                () => World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .BuildPaths()));
+                () => Tool.BuildPark()));
             AddBinding(new TriggerBinding<int>(Group, "SetPathType",
-                value => World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .SetPathType(value)));
+                value => Tool.SetPathType(value)));
             AddBinding(new TriggerBinding<int>(Group, "SetSiteType",
-                value => World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .SetSiteKind(value)));
+                value => Tool.SetSiteKind(value)));
             AddBinding(new TriggerBinding<int>(Group, "SetPlazaCenterPlacement",
-                value => World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .SetPlazaCenterPlacement(value)));
+                value => Tool.SetPlazaCenterPlacement(value)));
             AddBinding(new TriggerBinding<int>(Group, "SetPlazaArrangementPlacement",
-                value => World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .SetPlazaArrangementPlacement(value)));
+                value => Tool.SetPlazaArrangementPlacement(value)));
             AddBinding(new TriggerBinding<int>(Group, "SetPlazaCenterpieceSpacing",
-                value => World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .SetPlazaCenterpieceSpacing(value)));
+                value => Tool.SetPlazaCenterpieceSpacing(value)));
             AddBinding(new TriggerBinding<int>(Group, "SetPlazaArrangementSpacing",
-                value => World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .SetPlazaArrangementSpacing(value)));
+                value => Tool.SetPlazaArrangementSpacing(value)));
             AddBinding(new TriggerBinding<bool>(Group, "SetPlazaFenceEnabled",
-                value => World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .SetPlazaFenceEnabled(value)));
+                value => Tool.SetPlazaFenceEnabled(value)));
             AddBinding(new TriggerBinding<string>(Group, "SelectPlazaCenter",
-                value => World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .SelectPlazaCenter(value)));
+                value => Tool.SelectPlazaCenter(value)));
             AddBinding(new TriggerBinding<string>(Group, "EditPlazaArrangement",
-                value => World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .EditPlazaArrangement(value)));
+                value => Tool.EditPlazaArrangement(value)));
             AddBinding(new TriggerBinding(Group, "RemoveBuiltPaths",
-                () => World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .RemoveBuiltPaths()));
+                () => Tool.RemoveBuiltPaths()));
             AddBinding(new TriggerBinding<string>(Group, "SelectAsset",
-                value => World.GetOrCreateSystemManaged<ParkAssetCatalogSystem>()
-                    .Select(value)));
-            AddBinding(new TriggerBinding<string>(Group, "SelectParkPalette",
-                value => World.GetOrCreateSystemManaged<ParkAssetCatalogSystem>()
-                    .SelectParkPalette(value)));
+                value => Catalog.Select(value)));
             AddBinding(new TriggerBinding(Group, "GenerateDecorations",
-                () => World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .GenerateDecorations()));
+                () => Tool.GenerateDecorations()));
             AddBinding(new TriggerBinding<int>(Group, "SetVegetationDensity",
-                value => World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .SetVegetationDensity(value)));
+                value => Tool.SetVegetationDensity(value)));
             AddBinding(new TriggerBinding<int>(Group, "SetFurnitureDensity",
-                value => World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .SetFurnitureDensity(value)));
+                value => Tool.SetFurnitureDensity(value)));
             AddBinding(new TriggerBinding<int>(Group, "ToggleDecorationCategory",
-                value => World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .ToggleDecorationCategory(value)));
-            AddBinding(new TriggerBinding(Group, "BuildDecorations",
-                () => World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .BuildDecorations()));
-            AddBinding(new TriggerBinding(Group, "RemoveBuiltDecorations",
-                () => World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .RemoveBuiltDecorations()));
+                value => Tool.ToggleDecorationCategory(value)));
             AddBinding(new TriggerBinding(Group, "FinishPark",
-                () => World.GetOrCreateSystemManaged<ParkToolSystem>()
-                    .FinishPark()));
+                () => Tool.FinishPark()));
         }
 
         private void ToggleTool()
         {
             var tools = World.GetOrCreateSystemManaged<Game.Tools.ToolSystem>();
-            var parkTool = World.GetOrCreateSystemManaged<ParkToolSystem>();
+            var parkTool = Tool;
             var activating = tools.activeTool != parkTool;
             tools.activeTool = activating
                 ? parkTool
@@ -234,14 +193,7 @@ namespace ParkManager.Tools
             // prefab scan. Refresh on opening the tool, when all UI mods have
             // normally finished initializing, so the compact tiles gain their
             // real thumbnails without a manual reload button.
-            if (activating)
-                World.GetOrCreateSystemManaged<ParkAssetCatalogSystem>()
-                    .RequestRefresh();
-        }
-
-        private void ClearPolygon()
-        {
-            World.GetOrCreateSystemManaged<ParkToolSystem>().ClearPolygon();
+            if (activating) Catalog.RequestRefresh();
         }
 
         internal void SetToolActive(bool active)
@@ -260,19 +212,8 @@ namespace ParkManager.Tools
             _status?.Update(status);
         }
 
-        internal void SetAssetCatalogState(bool ready, string summary,
-            string optionsJson, string parkPaletteOptionsJson,
-            string selectedParkPalette)
-        {
-            _assetCatalogReady?.Update(ready);
-            _assetCatalogSummary?.Update(summary);
-            _assetOptionsJson?.Update(optionsJson ?? "{}");
-            _parkPaletteOptionsJson?.Update(parkPaletteOptionsJson ?? "[]");
-            _selectedParkPalette?.Update(selectedParkPalette ?? string.Empty);
-            var catalog = World.GetOrCreateSystemManaged<ParkAssetCatalogSystem>();
-            SetPlazaCenterOptions(catalog.GetPlazaCenterOptionsJson(),
-                catalog.GetSelectedPlazaCenterName());
-        }
+        internal void SetAssetOptions(string optionsJson)
+            => _assetOptionsJson?.Update(optionsJson ?? "{}");
 
         internal void SetPlannerState(bool plannerMode, int entranceCount,
             bool pathPlanReady)
@@ -315,8 +256,6 @@ namespace ParkManager.Tools
             _plazaCenterOptionsJson?.Update(optionsJson ?? "[]");
             _plazaCenterSelected?.Update(selectedName ?? string.Empty);
         }
-
-        internal void SetSnapMask(int mask) => _snapMask?.Update(mask);
 
         internal void SetDecorationState(int vegetationDensity,
             int furnitureDensity, int enabledMask, bool planReady,

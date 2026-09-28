@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using Game.Common;
-using Game.Objects;
 using Game.Prefabs;
 using Game.Simulation;
 using Game.Tools;
+using ParkManager.Geometry;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -25,7 +25,6 @@ namespace ParkManager.Tools
         private Entity _plazaAccessPrefab = Entity.Null;
         private readonly HashSet<Entity> _plazaAreaBaseline = new HashSet<Entity>();
         private readonly HashSet<Entity> _plazaAccessBaseline = new HashSet<Entity>();
-        private int _expectedPlazaAccessMarkers;
 
         private void InitializePlazaAccessPlacement()
         {
@@ -66,7 +65,7 @@ namespace ParkManager.Tools
             ResolvePedestrianAccessMarkerPrefab();
             _usesSurfaceFallback = false;
             _selectedPathWidth = 0f;
-            _selectedPathPrefabName = "Plaza-Navigationsfläche";
+            _selectedPathPrefabName = "Plaza navigation area";
             return _plazaNavigationPrefab != Entity.Null
                 && _plazaAccessPrefab != Entity.Null;
         }
@@ -124,17 +123,17 @@ namespace ParkManager.Tools
             if (_plazaPlan == null || _pathPlan == null || _points.Count < 3
                 || _entrances.Count == 0)
             {
-                PublishState("Zuerst Plaza und Eingänge planen.");
+                PublishState(UiText.Of("status.planPlazaFirst"));
                 return;
             }
             if (HasBuiltPaths)
             {
-                PublishState("Die Plaza ist bereits gebaut.");
+                PublishState(UiText.Of("status.plazaAlreadyBuilt"));
                 return;
             }
             if (!ResolvePlazaAccessPrefabs())
             {
-                const string error = "Vanilla-Navigationsfläche oder Fußgänger-Zugangsmarker fehlt; die Plaza wird nicht ohne Zugang gebaut. Details im Log.";
+                var error = UiText.Of("plaza.accessMissing");
                 PublishState(error);
                 PublishPathBuildState(error);
                 return;
@@ -142,7 +141,7 @@ namespace ParkManager.Tools
             if (!_assetCatalog.TryGetSelected(Assets.ParkAssetCategory.Surface,
                     out _parkSurfacePrefab, out _))
             {
-                PublishState("Kein sichtbarer Plaza-Untergrund verfügbar.");
+                PublishState(UiText.Of("status.noPlazaSurface"));
                 return;
             }
             try
@@ -154,63 +153,34 @@ namespace ParkManager.Tools
                     return;
                 }
                 _buildDefinitions.Clear();
-                ClearPlazaAccessBaseline();
-                CapturePrefabBaseline(_permanentAreaQuery,
-                    _plazaNavigationPrefab, _plazaAreaBaseline);
-                CapturePrefabBaseline(_permanentPlazaAccessQuery,
-                    _plazaAccessPrefab, _plazaAccessBaseline);
-                _parkSurfaceAreaBaseline.Clear();
-                CapturePrefabBaseline(_permanentAreaQuery,
-                    _parkSurfacePrefab, _parkSurfaceAreaBaseline);
+                CaptureMaterializationBaseline();
                 _pendingBuildRecord = CreatePathBuildRecord(_pathPlan.Seed);
                 var terrain = _terrainSystem.GetHeightData(waitForPending: true);
-                if (!CreatePlazaNavigationArea(ref terrain)
-                    || !CreateParkSurface(_parkSurfacePrefab, ref terrain))
-                    throw new InvalidOperationException("Plaza-Polygon oder Terrain ungültig.");
-                _expectedPlazaAccessMarkers = 0;
+                if (!CreatePolygonArea(_plazaNavigationPrefab, ref terrain)
+                    || !CreatePolygonArea(_parkSurfacePrefab, ref terrain))
+                    throw new InvalidOperationException(UiText.Of("error.plazaPolygonInvalid"));
+                _expectedAccessMarkers = 0;
                 for (var i = 0; i < _entrances.Count; i++)
                 {
                     if (!CreatePedestrianAccessMarker(_entrances[i], ref terrain))
-                        throw new InvalidOperationException($"Zugang {i + 1} konnte nicht platziert werden.");
-                    _expectedPlazaAccessMarkers++;
+                        throw new InvalidOperationException(UiText.Of("error.plazaAccessFailed",
+                            i + 1));
+                    _expectedAccessMarkers++;
                 }
                 _expectedPathCourses = 0;
                 _expectedPathAreas = 0;
                 _expectedParkSurfaceAreas = 1;
                 _pathBuildStartedFrame = UnityEngine.Time.frameCount;
                 _pathBuildPhase = PathBuildPhase.WaitingForMaterialization;
-                PublishState($"Plaza-Bau gestartet: Polygon und {_expectedPlazaAccessMarkers} Zugänge.");
-                PublishPathBuildState("CS2 erzeugt Navigationsfläche und Zugänge …");
+                PublishState(UiText.Of("status.plazaBuildStarted",
+                    _expectedAccessMarkers));
+                PublishPathBuildState(UiText.Of("path.plazaCreating"));
             }
             catch (Exception exception)
             {
                 Mod.Log.Error(exception, "ParkManager could not prepare plaza access.");
-                AbortPathBuild("Plaza-Bau konnte nicht vorbereitet werden: "
-                    + exception.Message);
+                AbortPathBuild(UiText.Of("path.plazaPrepareFailed", exception.Message));
             }
-        }
-
-        private bool CreatePlazaNavigationArea(ref TerrainHeightData terrain)
-        {
-            var definition = CreateBuildDefinition();
-            EntityManager.AddComponentData(definition, new CreationDefinition
-            {
-                m_Prefab = _plazaNavigationPrefab,
-            });
-            EntityManager.AddComponent<Updated>(definition);
-            var nodes = EntityManager.AddBuffer<Game.Areas.Node>(definition);
-            nodes.ResizeUninitialized(_points.Count + 1);
-            for (var i = 0; i < _points.Count; i++)
-            {
-                var point = _points[i];
-                var height = TerrainUtils.SampleHeight(ref terrain,
-                    new float3(point.x, 0f, point.y));
-                if (!math.isfinite(height)) return false;
-                nodes[i] = new Game.Areas.Node(
-                    new float3(point.x, height, point.y), float.MinValue);
-            }
-            nodes[_points.Count] = nodes[0];
-            return true;
         }
 
         private bool CreatePedestrianAccessMarker(float3 entrance,
@@ -253,12 +223,8 @@ namespace ParkManager.Tools
             var edgeIndex = -1;
             for (var i = 0; i < _points.Count; i++)
             {
-                var a = _points[i];
-                var b = _points[(i + 1) % _points.Count];
-                var edge = b - a;
-                var t = math.clamp(math.dot(entrance - a, edge)
-                    / math.max(0.0001f, math.lengthsq(edge)), 0f, 1f);
-                var distance = math.distancesq(entrance, a + edge * t);
+                var distance = PolygonMath.DistanceToSegmentSquared(entrance,
+                    _points[i], _points[(i + 1) % _points.Count]);
                 if (distance >= bestDistance) continue;
                 bestDistance = distance;
                 edgeIndex = i;
@@ -295,7 +261,7 @@ namespace ParkManager.Tools
                         _plazaAccessPrefab);
                     var surface = FindParkSurfaceArea(_tempAreaQuery,
                         _parkSurfacePrefab);
-                    if (area >= 1 && markers >= _expectedPlazaAccessMarkers
+                    if (area >= 1 && markers >= _expectedAccessMarkers
                         && surface != Entity.Null)
                     {
                         var nextId = 1;
@@ -309,19 +275,18 @@ namespace ParkManager.Tools
                             _pendingBuildRecord, ParkPathMemberKind.ParkSurface,
                             ref nextId);
                         if (attachedArea < 1 || attachedMarkers
-                            < _expectedPlazaAccessMarkers || !attachedSurface)
+                            < _expectedAccessMarkers || !attachedSurface)
                             return true;
                         applyMode = ApplyMode.Apply;
                         _pathApplyFrame = UnityEngine.Time.frameCount;
                         _pathBuildPhase = PathBuildPhase.ApplyRequested;
-                        PublishPathBuildState("Navigationsfläche wird übernommen …");
+                        PublishPathBuildState(UiText.Of("path.plazaApplying"));
                         return true;
                     }
                     if (UnityEngine.Time.frameCount - _pathBuildStartedFrame
                         <= MaterializationTimeoutFrames) return true;
-                    AbortPathBuild($"Plaza-Entities fehlen: {area}/1 Fläche, "
-                        + $"{markers}/{_expectedPlazaAccessMarkers} Zugänge, "
-                        + $"{(surface == Entity.Null ? 0 : 1)}/1 Untergrund.");
+                    AbortPathBuild(UiText.Of("path.plazaEntitiesMissing", area, markers,
+                        _expectedAccessMarkers, surface == Entity.Null ? 0 : 1));
                     return true;
                 case PathBuildPhase.ApplyRequested:
                     applyMode = ApplyMode.None;
@@ -329,7 +294,7 @@ namespace ParkManager.Tools
                         < GeometrySettleFrames) return true;
                     TagMaterializedPlazaAccess(_pendingBuildRecord,
                         out var areas, out var accesses, out var surfaces);
-                    if (areas >= 1 && accesses >= _expectedPlazaAccessMarkers
+                    if (areas >= 1 && accesses >= _expectedAccessMarkers
                         && surfaces >= 1)
                     {
                         LogPlazaAccessConnections(_pendingBuildRecord);
@@ -338,15 +303,13 @@ namespace ParkManager.Tools
                     }
                     if (UnityEngine.Time.frameCount - _pathApplyFrame
                         <= MaterializationTimeoutFrames) return true;
-                    AbortPathBuild($"Plaza nach Übernahme unvollständig: "
-                        + $"{areas}/1 Fläche, "
-                        + $"{accesses}/{_expectedPlazaAccessMarkers} Zugänge, "
-                        + $"{surfaces}/1 Untergrund.");
+                    AbortPathBuild(UiText.Of("path.plazaIncomplete", areas, accesses,
+                        _expectedAccessMarkers, surfaces));
                     return true;
                 case PathBuildPhase.ClearRequested:
                     applyMode = ApplyMode.Clear;
                     _pathBuildPhase = PathBuildPhase.Idle;
-                    PublishPathBuildState("Plaza-Bau wurde verworfen. Planung prüfen und erneut bauen.",
+                    PublishPathBuildState(UiText.Of("path.plazaDiscarded"),
                         PathBuildStatus.Error);
                     return true;
                 default:
@@ -419,12 +382,6 @@ namespace ParkManager.Tools
                 markerCount++;
             }
             return markerCount;
-        }
-
-        private void ClearPlazaAccessBaseline()
-        {
-            _plazaAreaBaseline.Clear();
-            _plazaAccessBaseline.Clear();
         }
 
         private void LogPlazaAccessConnections(Entity park)

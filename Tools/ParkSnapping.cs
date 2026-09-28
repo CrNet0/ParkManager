@@ -77,13 +77,6 @@ namespace ParkManager.Tools
             offMask = Snap.None;
         }
 
-        private void ConfigureSnapping()
-        {
-            m_SnapOnMask = SupportedSnapKinds;
-            m_SnapOffMask = SupportedSnapKinds;
-            _ui?.SetSnapMask((int)SupportedSnapKinds);
-        }
-
         private void ClearSnapFeedback()
         {
             LastSnap = SnapKind.None;

@@ -7,7 +7,6 @@ using Game.Prefabs;
 using Game.Simulation;
 using Game.Tools;
 using ParkManager.Assets;
-using ParkManager.Geometry;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -54,7 +53,7 @@ namespace ParkManager.Tools
         private int _expectedPathCourses;
         private int _expectedPathAreas;
         private int _expectedParkSurfaceAreas;
-        private int _expectedParkAccessMarkers;
+        private int _expectedAccessMarkers;
         private int _lastModificationCheckFrame;
         private readonly HashSet<Entity> _pathEntityBaseline =
             new HashSet<Entity>();
@@ -157,38 +156,38 @@ namespace ParkManager.Tools
         {
             if (PathBuildBusy)
             {
-                PublishState("Der aktuelle Wegebau wird noch von CS2 verarbeitet.");
+                PublishState(UiText.Of("status.pathBuildBusy"));
                 return;
             }
-            if (_selectedSiteKind == ProceduralSiteKind.Plaza)
+            if (IsPlaza)
             {
                 BuildPlazaAccess();
                 return;
             }
             if (_pathPlan == null || _pathPlan.Edges.Count == 0)
             {
-                PublishState("Zuerst einen Wegentwurf erzeugen.");
+                PublishState(UiText.Of("status.planPathsFirst"));
                 return;
             }
             if (HasBuiltPaths)
             {
-                PublishState("Vor einem Neubau zuerst die gebauten Testwege entfernen.");
+                PublishState(UiText.Of("status.removePathsBeforeRebuild"));
                 return;
             }
             if (!ResolvePlacementPrefabs())
             {
-                PublishState("Benötigte Vanilla-Prefabs sind noch nicht verfügbar.");
+                PublishState(UiText.Of("status.prefabsMissing"));
                 return;
             }
             if (!ResolvePedestrianAccessMarkerPrefab())
             {
-                PublishState("Fußgänger-Zugangsmarker fehlt; der Park wird nicht ohne Zugang gebaut.");
+                PublishState(UiText.Of("status.accessMarkerMissing"));
                 return;
             }
             if (!_assetCatalog.TryGetSelected(ParkAssetCategory.Surface,
                     out _parkSurfacePrefab, out _))
             {
-                PublishState("Kein sichtbarer Vanilla-Untergrund verfügbar.");
+                PublishState(UiText.Of("status.noSurface"));
                 return;
             }
             try
@@ -201,71 +200,67 @@ namespace ParkManager.Tools
                 }
                 _buildDefinitions.Clear();
                 CaptureMaterializationBaseline();
-                _plazaAccessBaseline.Clear();
-                CapturePrefabBaseline(_permanentPlazaAccessQuery,
-                    _plazaAccessPrefab, _plazaAccessBaseline);
                 _pendingBuildRecord = CreatePathBuildRecord(_pathPlan.Seed);
                 var heightData = _terrainSystem.GetHeightData(waitForPending: true);
                 var heights = new Dictionary<int, float>();
-                var randomSeed = (uint)Math.Max(1, _pathPlan.Seed);
-                var random = new Unity.Mathematics.Random(randomSeed);
+                var random = new Unity.Mathematics.Random(
+                    (uint)Math.Max(1, _pathPlan.Seed));
                 _expectedPathCourses = 0;
                 _expectedPathAreas = 0;
-                _expectedParkSurfaceAreas = 0;
                 var courses = BuildMaterializedPathCourses(ref heightData,
                     heights, out var chainCount);
                 for (var i = 0; i < courses.Count; i++)
                     if (CreatePathCourse(courses[i].Curve, courses[i].Length,
                             ref random)) _expectedPathCourses++;
-                for (var i = 0; i < _pathPlan.Edges.Count; i++)
-                {
-                    var edge = _pathPlan.Edges[i];
-                    var a2 = _pathPlan.Nodes[edge.A].Position;
-                    var b2 = _pathPlan.Nodes[edge.B].Position;
-                    if (_usesSurfaceFallback
-                        && CreatePathSurface(a2, b2, edge.Width, ref heightData))
-                        _expectedPathAreas++;
-                }
-                if (!CreateParkSurface(_parkSurfacePrefab, ref heightData))
+                if (_usesSurfaceFallback)
+                    for (var i = 0; i < _pathPlan.Edges.Count; i++)
+                    {
+                        var edge = _pathPlan.Edges[i];
+                        if (CreatePathSurface(_pathPlan.Nodes[edge.A].Position,
+                                _pathPlan.Nodes[edge.B].Position, edge.Width,
+                                ref heightData))
+                            _expectedPathAreas++;
+                    }
+                if (!CreatePolygonArea(_parkSurfacePrefab, ref heightData))
                     throw new InvalidOperationException(
-                        "Der gewählte Untergrund konnte nicht vorbereitet werden.");
+                        UiText.Of("error.surfacePrepareFailed"));
                 _expectedParkSurfaceAreas = 1;
-                _expectedParkAccessMarkers = 0;
+                _expectedAccessMarkers = 0;
                 for (var i = 0; i < _entrances.Count; i++)
                 {
                     if (!CreatePedestrianAccessMarker(_entrances[i], ref heightData))
                         throw new InvalidOperationException(
-                            $"Zugangsmarker für Parkeingang {i + 1} konnte nicht platziert werden.");
-                    _expectedParkAccessMarkers++;
+                            UiText.Of("error.parkAccessMarkerFailed", i + 1));
+                    _expectedAccessMarkers++;
                 }
 
                 if (_expectedPathCourses == 0
                     || _usesSurfaceFallback && _expectedPathAreas == 0)
-                    throw new InvalidOperationException("Der Plan enthält keine baubaren Segmente.");
+                    throw new InvalidOperationException(UiText.Of("error.noBuildableSegments"));
 
                 LogPlannedPathDiagnostics();
                 LogMaterializedCourseDiagnostics(courses, chainCount);
 
                 _pathBuildStartedFrame = UnityEngine.Time.frameCount;
                 _pathBuildPhase = PathBuildPhase.WaitingForMaterialization;
-                PublishState($"Wegebau gestartet: {_expectedPathCourses} Segmente werden materialisiert.");
+                PublishState(UiText.Of("status.pathBuildStarted", _expectedPathCourses));
                 PublishPathBuildState(_usesSurfaceFallback
-                    ? "CS2 erzeugt Wegknoten und Ersatzoberflächen …"
-                    : $"CS2 erzeugt das Vanilla-Netz '{_selectedPathPrefabName}' …");
+                    ? UiText.Of("path.creatingFallback")
+                    : UiText.Of("path.creatingNet", _selectedPathPrefabName));
             }
             catch (Exception exception)
             {
                 Mod.Log.Error(exception, "ParkManager could not create path definitions.");
-                AbortPathBuild("Wegebau konnte nicht vorbereitet werden: " + exception.Message);
+                AbortPathBuild(UiText.Of("path.prepareFailed", exception.Message));
             }
         }
 
         internal void SetPathType(int value)
         {
-            if (_selectedSiteKind == ProceduralSiteKind.Plaza) return;
+            if (IsPlaza) return;
             if (PathBuildBusy || HasBuiltPaths)
             {
-                PublishState("Der Wegtyp kann nach dem Wegebau nicht mehr geändert werden.");
+                PublishState(UiText.Of("status.pathTypeLocked"));
                 return;
             }
             var type = value == (int)ParkPathType.Narrow
@@ -282,38 +277,37 @@ namespace ParkManager.Tools
                 _decorationPlan = null;
             _ui?.SetPathType((int)_selectedPathType);
             PublishDecorationState(decorationSeed != 0
-                ? "Ausstattung an die neue Wegbreite angepasst."
-                : "Wegtyp geändert; Ausstattung noch nicht geplant.");
+                ? UiText.Of("decoration.adaptedToPathWidth")
+                : UiText.Of("decoration.pathTypeChanged"));
             PublishState(type == ParkPathType.Narrow
-                ? "Schmale Fußwege ausgewählt."
-                : "Breite Fußwege ausgewählt.");
+                ? UiText.Of("status.narrowPathsSelected")
+                : UiText.Of("status.widePathsSelected"));
         }
 
         internal void RemoveBuiltPaths()
         {
-            if (PathBuildBusy || DecorationBuildBusy)
+            if (BuildBusy)
             {
-                PublishState("Entfernen ist erst nach Abschluss des Baues möglich.");
+                PublishState(UiText.Of("status.removeAfterBuild"));
                 return;
             }
             if (!HasBuiltPaths)
             {
-                PublishState("Es sind keine von ParkManager gebauten Testwege vorhanden.");
-                PublishPathBuildState("Noch keine Testwege gebaut.");
+                PublishState(UiText.Of("status.noBuiltPaths"));
+                PublishPathBuildState(UiText.Of("path.noneBuilt"));
                 return;
             }
 
-            var removed = CountMembers(_lastBuildRecord);
-            RequestBundleDeletion(_lastBuildRecord);
+            var removed = DeleteEditableMembers(_lastBuildRecord);
             _lastBuildRecord = Entity.Null;
             DecorationBuildWasRemoved();
-            PublishState($"Gebauter Park entfernt ({removed} Teile).");
-            PublishPathBuildState("Noch kein Park gebaut.");
+            PublishState(UiText.Of("status.parkRemoved", removed));
+            PublishPathBuildState(UiText.Of("path.noParkBuilt"));
         }
 
         private bool ProcessPathPlacement()
         {
-            if (_selectedSiteKind == ProceduralSiteKind.Plaza
+            if (IsPlaza
                 && _pathBuildPhase != PathBuildPhase.Idle)
                 return ProcessPlazaAccessPlacement();
             switch (_pathBuildPhase)
@@ -335,7 +329,7 @@ namespace ParkManager.Tools
                     if (pathParts >= _expectedPathCourses
                         && areas >= _expectedPathAreas
                         && parkSurface != Entity.Null
-                        && accessMarkers >= _expectedParkAccessMarkers)
+                        && accessMarkers >= _expectedAccessMarkers)
                     {
                         var nextElementId = 1;
                         var attachedPaths = TagEditableTempEntities(_tempPathQuery,
@@ -355,7 +349,7 @@ namespace ParkManager.Tools
                         if (attachedPaths < _expectedPathCourses
                             || attachedAreas < _expectedPathAreas
                             || !attachedParkSurface
-                            || attachedMarkers < _expectedParkAccessMarkers)
+                            || attachedMarkers < _expectedAccessMarkers)
                             return true;
 
                         LogTemporaryPathDiagnostics(_pedestrianPathPrefab);
@@ -365,12 +359,12 @@ namespace ParkManager.Tools
                         Mod.Log.Info($"ParkManager tagged {attachedPaths} temporary path "
                             + $"entities and {attachedAreas} temporary areas before Apply; "
                             + "the permanent graph will be rediscovered afterwards.");
-                        PublishPathBuildState("Vanilla-Wege werden als frei editierbare Elemente übernommen …");
+                        PublishPathBuildState(UiText.Of("path.applying"));
                         return true;
                     }
                     if (UnityEngine.Time.frameCount - _pathBuildStartedFrame
                         <= MaterializationTimeoutFrames) return true;
-                    AbortPathBuild("Zeitüberschreitung beim Erzeugen der Weg-Entities.");
+                    AbortPathBuild(UiText.Of("path.timeout"));
                     return true;
                 case PathBuildPhase.ApplyRequested:
                     applyMode = ApplyMode.None;
@@ -384,16 +378,15 @@ namespace ParkManager.Tools
                     if (permanentEdges < _expectedPathCourses
                         || permanentAreas < _expectedPathAreas
                         || permanentParkSurfaces < _expectedParkSurfaceAreas
-                        || permanentMarkers < _expectedParkAccessMarkers)
+                        || permanentMarkers < _expectedAccessMarkers)
                     {
                         if (UnityEngine.Time.frameCount - _pathApplyFrame
                             <= MaterializationTimeoutFrames) return true;
-                        AbortPathBuild("Das materialisierte Wegenetz blieb "
-                            + $"unvollständig: {permanentEdges}/{_expectedPathCourses} "
-                            + $"Kanten, {permanentNodes} Knoten und "
-                            + $"{permanentAreas}/{_expectedPathAreas} Wegflächen und "
-                            + $"{permanentParkSurfaces}/{_expectedParkSurfaceAreas} Untergründe, "
-                            + $"{permanentMarkers}/{_expectedParkAccessMarkers} Zugangsmarker.");
+                        AbortPathBuild(UiText.Of("path.incomplete", permanentEdges,
+                            _expectedPathCourses, permanentNodes, permanentAreas,
+                            _expectedPathAreas, permanentParkSurfaces,
+                            _expectedParkSurfaceAreas, permanentMarkers,
+                            _expectedAccessMarkers));
                         return true;
                     }
                     Mod.Log.Info($"ParkManager rediscovered the permanent path graph: "
@@ -408,7 +401,7 @@ namespace ParkManager.Tools
                 case PathBuildPhase.ClearRequested:
                     applyMode = ApplyMode.Clear;
                     _pathBuildPhase = PathBuildPhase.Idle;
-                    PublishPathBuildState("Wegebau wurde verworfen. Planung prüfen und erneut bauen.",
+                    PublishPathBuildState(UiText.Of("path.discarded"),
                         PathBuildStatus.Error);
                     return true;
                 default:
@@ -418,7 +411,7 @@ namespace ParkManager.Tools
 
         private bool ResolvePlacementPrefabs()
         {
-            if (_selectedSiteKind == ProceduralSiteKind.Plaza)
+            if (IsPlaza)
                 return ResolvePlazaAccessPrefabs();
             if (HasBuiltinEntity(_pedestrianPathPrefab))
                 return !_usesSurfaceFallback
@@ -470,6 +463,7 @@ namespace ParkManager.Tools
             var best = Entity.Null;
             var bestScore = 0;
             var bestWidth = float.MaxValue;
+            var targetWidth = pathType == ParkPathType.Wide ? 8f : 4f;
             using var prefabs = _pathPrefabQuery.ToEntityArray(Allocator.TempJob);
             for (var i = 0; i < prefabs.Length; i++)
             {
@@ -479,7 +473,6 @@ namespace ParkManager.Tools
                 var name = prefab.name ?? string.Empty;
                 var lower = name.ToLowerInvariant();
                 var score = 0;
-                var targetWidth = pathType == ParkPathType.Wide ? 8f : 4f;
                 if (pathType == ParkPathType.Wide
                     && string.Equals(name, "PedestrianPathWide01",
                         StringComparison.OrdinalIgnoreCase)) score += 2000;
@@ -583,10 +576,12 @@ namespace ParkManager.Tools
             // therefore cannot masquerade as a selectable path element.
             EntityManager.AddComponentData(record, new PrefabRef
             {
-                m_Prefab = _selectedSiteKind == ProceduralSiteKind.Plaza
+                m_Prefab = IsPlaza
                     ? _plazaNavigationPrefab : _pedestrianPathPrefab,
             });
             EntityManager.AddComponentData(record, new ParkPathBuildMarker { Seed = seed });
+            Mod.Log.Info($"ParkManager BUILD-SURFACE park={record} prefab={_parkSurfacePrefab} "
+                + $"name='{PrefabName(_parkSurfacePrefab)}'.");
             EntityManager.AddComponentData(record, new ParkEditableBuildState
             {
                 Version = ParkEditableBuildState.CurrentVersion,
@@ -602,7 +597,7 @@ namespace ParkManager.Tools
                 height = TerrainUtils.SampleHeight(ref heightData,
                     new float3(point.x, 0f, point.y));
                 if (!math.isfinite(height))
-                    throw new InvalidOperationException("Terrainhöhe ist nicht endlich.");
+                    throw new InvalidOperationException(UiText.Of("error.terrainNotFinite"));
                 heights[nodeIndex] = height;
             }
             return new float3(point.x, height, point.y);
@@ -611,14 +606,24 @@ namespace ParkManager.Tools
         private bool CreatePathCourse(Bezier4x3 curve, float length,
             ref Unity.Mathematics.Random random)
         {
-            var a = curve.a;
-            var b = curve.d;
             if (length < 1f) return false;
+            CreateNetCourseDefinition(_pedestrianPathPrefab, curve, length,
+                random.NextInt());
+            return true;
+        }
+
+        /// <summary>
+        /// Emits one free-standing network course (path or native fence) from
+        /// the curve start to its end, like a single drag of the net tool.
+        /// </summary>
+        private void CreateNetCourseDefinition(Entity prefab, Bezier4x3 curve,
+            float length, int randomSeed)
+        {
             var definition = CreateBuildDefinition();
             EntityManager.AddComponentData(definition, new CreationDefinition
             {
-                m_Prefab = _pedestrianPathPrefab,
-                m_RandomSeed = random.NextInt(),
+                m_Prefab = prefab,
+                m_RandomSeed = randomSeed,
             });
             EntityManager.AddComponent<Updated>(definition);
             EntityManager.AddComponentData(definition, new NetCourse
@@ -627,31 +632,25 @@ namespace ParkManager.Tools
                 m_Length = length,
                 m_FixedIndex = -1,
                 m_Elevation = float2.zero,
-                m_StartPosition = new CoursePos
-                {
-                    m_Entity = Entity.Null,
-                    m_Position = a,
-                    m_Rotation = NetUtils.GetNodeRotation(MathUtils.StartTangent(curve)),
-                    m_CourseDelta = 0f,
-                    m_Elevation = float2.zero,
-                    m_Flags = CoursePosFlags.IsFirst,
-                    m_ParentMesh = -1,
-                    m_SplitPosition = 0f,
-                },
-                m_EndPosition = new CoursePos
-                {
-                    m_Entity = Entity.Null,
-                    m_Position = b,
-                    m_Rotation = NetUtils.GetNodeRotation(MathUtils.EndTangent(curve)),
-                    m_CourseDelta = 1f,
-                    m_Elevation = float2.zero,
-                    m_Flags = CoursePosFlags.IsLast,
-                    m_ParentMesh = -1,
-                    m_SplitPosition = 0f,
-                },
+                m_StartPosition = CourseEnd(curve.a,
+                    MathUtils.StartTangent(curve), 0f, CoursePosFlags.IsFirst),
+                m_EndPosition = CourseEnd(curve.d,
+                    MathUtils.EndTangent(curve), 1f, CoursePosFlags.IsLast),
             });
-            return true;
         }
+
+        private static CoursePos CourseEnd(float3 position, float3 tangent,
+            float delta, CoursePosFlags flags) => new CoursePos
+        {
+            m_Entity = Entity.Null,
+            m_Position = position,
+            m_Rotation = NetUtils.GetNodeRotation(tangent),
+            m_CourseDelta = delta,
+            m_Elevation = float2.zero,
+            m_Flags = flags,
+            m_ParentMesh = -1,
+            m_SplitPosition = 0f,
+        };
 
         private bool CreatePathSurface(float2 a, float2 b, float width,
             ref TerrainHeightData heightData)
@@ -718,20 +717,16 @@ namespace ParkManager.Tools
                     != prefab) continue;
                 if (EntityManager.HasComponent<Game.Areas.Area>(entity)
                     && IsParkSurfaceArea(entity)) continue;
-                var kind = EntityManager.HasComponent<Game.Net.Edge>(entity)
-                    ? ParkPathMemberKind.Edge
-                    : EntityManager.HasComponent<Game.Net.Node>(entity)
-                        ? ParkPathMemberKind.Node
-                        : ParkPathMemberKind.Surface;
-                var member = new ParkPathMember
+                SetMember(entity, new ParkPathMember
                 {
                     Park = park,
                     ElementId = nextElementId++,
-                    Kind = kind,
-                };
-                if (EntityManager.HasComponent<ParkPathMember>(entity))
-                    EntityManager.SetComponentData(entity, member);
-                else EntityManager.AddComponentData(entity, member);
+                    Kind = EntityManager.HasComponent<Game.Net.Edge>(entity)
+                        ? ParkPathMemberKind.Edge
+                        : EntityManager.HasComponent<Game.Net.Node>(entity)
+                            ? ParkPathMemberKind.Node
+                            : ParkPathMemberKind.Surface,
+                });
                 count++;
             }
             return count;
@@ -746,16 +741,31 @@ namespace ParkManager.Tools
         /// </summary>
         private void CaptureMaterializationBaseline()
         {
-            _pathEntityBaseline.Clear();
-            _areaEntityBaseline.Clear();
-            CapturePrefabBaseline(_permanentPathQuery, _pedestrianPathPrefab,
-                _pathEntityBaseline);
-            if (_usesSurfaceFallback)
-                CapturePrefabBaseline(_permanentAreaQuery, _pavementSurfacePrefab,
-                    _areaEntityBaseline);
-            _parkSurfaceAreaBaseline.Clear();
+            ClearMaterializationBaselines();
+            if (IsPlaza)
+                CapturePrefabBaseline(_permanentAreaQuery, _plazaNavigationPrefab,
+                    _plazaAreaBaseline);
+            else
+            {
+                CapturePrefabBaseline(_permanentPathQuery, _pedestrianPathPrefab,
+                    _pathEntityBaseline);
+                if (_usesSurfaceFallback)
+                    CapturePrefabBaseline(_permanentAreaQuery,
+                        _pavementSurfacePrefab, _areaEntityBaseline);
+            }
+            CapturePrefabBaseline(_permanentPlazaAccessQuery, _plazaAccessPrefab,
+                _plazaAccessBaseline);
             CapturePrefabBaseline(_permanentAreaQuery, _parkSurfacePrefab,
                 _parkSurfaceAreaBaseline);
+        }
+
+        private void ClearMaterializationBaselines()
+        {
+            _pathEntityBaseline.Clear();
+            _areaEntityBaseline.Clear();
+            _parkSurfaceAreaBaseline.Clear();
+            _plazaAreaBaseline.Clear();
+            _plazaAccessBaseline.Clear();
         }
 
         private void CapturePrefabBaseline(EntityQuery query, Entity prefab,
@@ -943,6 +953,29 @@ namespace ParkManager.Tools
             return true;
         }
 
+        /// <summary>Adds or overwrites the membership component.</summary>
+        private void SetMember(Entity entity, ParkPathMember member)
+        {
+            if (EntityManager.HasComponent<ParkPathMember>(entity))
+                EntityManager.SetComponentData(entity, member);
+            else EntityManager.AddComponentData(entity, member);
+        }
+
+        private void MarkCompleted(Entity park)
+        {
+            var completed = new ParkCompletedBundle
+            {
+                Version = ParkCompletedBundle.CurrentVersion,
+            };
+            if (EntityManager.HasComponent<ParkCompletedBundle>(park))
+                EntityManager.SetComponentData(park, completed);
+            else EntityManager.AddComponentData(park, completed);
+        }
+
+        private string PrefabName(Entity prefab)
+            => _pathPrefabSystem.TryGetPrefab<PrefabBase>(prefab, out var asset)
+                && asset != null ? asset.name : "<unresolved>";
+
         private int NextMemberElementId(Entity park)
         {
             var next = 1;
@@ -973,27 +1006,23 @@ namespace ParkManager.Tools
             _lastBuildRecord = _pendingBuildRecord;
             _pendingBuildRecord = Entity.Null;
             _buildDefinitions.Clear();
-            _pathEntityBaseline.Clear();
-            _areaEntityBaseline.Clear();
-            _parkSurfaceAreaBaseline.Clear();
-            ClearPlazaAccessBaseline();
+            ClearMaterializationBaselines();
             _pathBuildPhase = PathBuildPhase.Idle;
             _preflightWarning = null;
             _buildIssues.Clear();
             _lastModificationCheckFrame = UnityEngine.Time.frameCount;
-            if (_selectedSiteKind == ProceduralSiteKind.Plaza)
+            if (IsPlaza)
             {
-                PublishState("Plaza-Fläche und Zugänge gebaut.");
-                PublishPathBuildState($"Plaza gebaut · {memberCount} Elemente · "
-                    + $"Seed {_pathPlan?.Seed ?? 0}");
+                PublishState(UiText.Of("status.plazaBuilt"));
+                PublishPathBuildState(UiText.Of("path.plazaBuilt", memberCount,
+                    _pathPlan?.Seed ?? 0));
             }
             else
             {
-                PublishState($"Testwege gebaut: {_expectedPathCourses} verbundene "
-                    + $"Segmente mit '{_selectedPathPrefabName}'. Einzelne Knoten und "
-                    + "Segmente können jetzt extern bearbeitet werden.");
-                PublishPathBuildState($"Gebaut · frei editierbar · {memberCount} Elemente · "
-                    + $"{_selectedPathPrefabName} · Seed {_pathPlan?.Seed ?? 0}");
+                PublishState(UiText.Of("status.pathsBuilt", _expectedPathCourses,
+                    _selectedPathPrefabName));
+                PublishPathBuildState(UiText.Of("path.built", memberCount,
+                    _selectedPathPrefabName, _pathPlan?.Seed ?? 0));
             }
             Mod.Log.Info($"ParkManager built {_expectedPathCourses} pedestrian courses and "
                 + $"{_expectedPathAreas} surfaces as {memberCount} top-level editable entities.");
@@ -1050,7 +1079,7 @@ namespace ParkManager.Tools
             Mod.Log.Warn($"ParkManager path build aborted in {_pathBuildPhase} "
                 + $"(seed {_pathPlan?.Seed ?? 0}, expected {_expectedPathCourses} "
                 + $"courses/{_expectedPathAreas} path areas): {reason}");
-            if (_selectedSiteKind == ProceduralSiteKind.Plaza)
+            if (IsPlaza)
                 TagMaterializedPlazaAccess(_pendingBuildRecord,
                     out _, out _, out _);
             else TagMaterializedAccessMarkers(_pendingBuildRecord);
@@ -1061,15 +1090,11 @@ namespace ParkManager.Tools
             DeleteEditableMembers(_pendingBuildRecord);
             var discardedDefinitions = DiscardBuildDefinitions();
             _pendingBuildRecord = Entity.Null;
-            _pathEntityBaseline.Clear();
-            _areaEntityBaseline.Clear();
-            _parkSurfaceAreaBaseline.Clear();
-            ClearPlazaAccessBaseline();
+            ClearMaterializationBaselines();
             applyMode = ApplyMode.Clear;
-            _pathApplyFrame = UnityEngine.Time.frameCount;
             _pathBuildPhase = PathBuildPhase.ClearRequested;
             PublishState(reason);
-            PublishPathBuildState("Fehler: " + reason, PathBuildStatus.Error);
+            PublishPathBuildState(UiText.Of("path.failed", reason), PathBuildStatus.Error);
             Mod.Log.Info($"ParkManager abort cleanup captured "
                 + $"{materializedEdges} permanent edges, {materializedNodes} "
                 + $"permanent nodes, {materializedAreas} path surfaces and "

@@ -3,6 +3,7 @@ import { useValue } from "cs2/api";
 import { AssetChoiceMap } from "../assetChoices";
 import { editPlazaArrangement, plazaArrangementJson$,
   setFurnitureDensity } from "../bindings";
+import { AssetIcon, scrollTileGrid, useIconFailures } from "./AssetIcon";
 import { RangeSlider } from "./RangeSlider";
 import { Texts } from "../i18n";
 import styles from "../panel.module.less";
@@ -31,15 +32,16 @@ type Props = {
   busy: boolean;
   density: number;
   decorationPlanReady: boolean;
-  summary: string;
+  /** Localized notice shown instead of the help text, e.g. "does not fit". */
+  notice: string | null;
 };
 
 /** Five ordered slots; every asset choice applies to exactly one slot. */
 export const PlazaArrangementEditor = ({ t, choices, busy, density,
-  decorationPlanReady, summary }: Props) => {
+  decorationPlanReady, notice }: Props) => {
   const arrangement = parseArrangement(useValue(plazaArrangementJson$));
   const [selected, setSelected] = useState(0);
-  const [failedIcons, setFailedIcons] = useState<Record<string, boolean>>({});
+  const icons = useIconFailures();
   const gridRef = useRef<HTMLDivElement | null>(null);
   const current = arrangement[Math.min(selected, arrangement.length - 1)];
   const selectedIndex = Math.min(selected, arrangement.length - 1);
@@ -51,19 +53,11 @@ export const PlazaArrangementEditor = ({ t, choices, busy, density,
     [selectedIndex, current?.kind]);
   const send = (action: string, index: number, value?: string | number) =>
     editPlazaArrangement(`${action}\n${index}${value === undefined ? "" : `\n${value}`}`);
-  const scroll = (direction: number) => {
-    const grid = gridRef.current;
-    if (!grid) return;
-    const tile = grid.querySelector("button");
-    grid.scrollTop += direction * (tile
-      ? tile.getBoundingClientRect().height : 78) * 2;
-  };
   return <div className={styles.plazaArrangementStage}>
     <div className={styles.assetStageHeader} data-testid="asset-header">
       <div>
         <p>{decorationPlanReady ? t.plazaDecorationPreview
-          : summary.startsWith("Das Arrangement") ? summary
-            : t.plazaArrangementHelp}</p>
+          : notice ?? t.plazaArrangementHelp}</p>
       </div>
       <div className={`${styles.densityControl} ${styles.plazaArrangementDensity}`}
         data-testid="plaza-density-settings">
@@ -94,10 +88,8 @@ export const PlazaArrangementEditor = ({ t, choices, busy, density,
               aria-pressed={index === selectedIndex}
               onClick={() => setSelected(index)}>
               <span>{index + 1}</span>
-              {asset?.icon && !failedIcons[asset.icon] ? <img src={asset.icon} alt=""
-                onError={() => setFailedIcons((state) => ({ ...state,
-                  [asset.icon]: true }))} />
-                : <b>{t.categories[kind.key].charAt(0)}</b>}
+              <AssetIcon icon={asset?.icon} icons={icons}
+                fallback={<b>{t.categories[kind.key].charAt(0)}</b>} />
               <small title={item.name || t.automatic}>
                 {item.name || t.categories[kind.key]}</small>
             </button>;
@@ -139,19 +131,19 @@ export const PlazaArrangementEditor = ({ t, choices, busy, density,
               disabled={busy} title={option.name} aria-label={option.name}
               aria-pressed={option.name === current?.name}
               onClick={() => send("asset", selectedIndex, option.name)}>
-              {option.icon && !failedIcons[option.icon]
-                ? <img className={styles.assetChoiceIcon} src={option.icon} alt=""
-                    onError={() => setFailedIcons((state) => ({ ...state,
-                      [option.icon]: true }))} />
-                : <span className={styles.assetChoiceFallback}>✦</span>}
+              <AssetIcon icon={option.icon} icons={icons}
+                className={styles.assetChoiceIcon}
+                fallback={<span className={styles.assetChoiceFallback}>✦</span>} />
               <span className={styles.assetChoiceName}>{option.name}</span>
               {option.name === current?.name
                 ? <span className={styles.assetChoiceCheck}>✓</span> : null}
             </button>)}
           </div>
           <div className={styles.assetScrollControls}>
-            <button title={t.scrollAssetsUp} onClick={() => scroll(-1)}>▲</button>
-            <button title={t.scrollAssetsDown} onClick={() => scroll(1)}>▼</button>
+            <button title={t.scrollAssetsUp}
+              onClick={() => scrollTileGrid(gridRef.current, -1)}>▲</button>
+            <button title={t.scrollAssetsDown}
+              onClick={() => scrollTileGrid(gridRef.current, 1)}>▼</button>
           </div>
         </div>
         <div className={styles.plazaArrangementSelection}>

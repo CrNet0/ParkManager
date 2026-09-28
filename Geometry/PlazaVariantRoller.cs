@@ -45,7 +45,7 @@ namespace ParkManager.Geometry
             IReadOnlyList<string> centers, IReadOnlyList<string> surfaces,
             IReadOnlyList<string> fences)
         {
-            var random = new Unity.Mathematics.Random(MixSeed(seed, 0x6a09e667u));
+            var random = new Unity.Mathematics.Random(Seeds.Mix(seed, 0x6a09e667u));
             // Draw every value unconditionally so that an empty asset list
             // does not shift the values of the following settings.
             var withCenter = random.NextFloat() >= NoCenterpieceChance;
@@ -76,7 +76,7 @@ namespace ParkManager.Geometry
         internal static PlazaFurnishingVariant RollFurnishing(int seed,
             IReadOnlyList<IReadOnlyList<string>> assetsByKind)
         {
-            var random = new Unity.Mathematics.Random(MixSeed(seed, 0xbb67ae85u));
+            var random = new Unity.Mathematics.Random(Seeds.Mix(seed, 0xbb67ae85u));
             var result = new PlazaFurnishingVariant
             {
                 Density = random.NextInt(1, 9) * 25,
@@ -120,17 +120,6 @@ namespace ParkManager.Geometry
             var index = random.NextInt(0, int.MaxValue);
             return names == null || names.Count == 0
                 ? string.Empty : names[index % names.Count] ?? string.Empty;
-        }
-
-        private static uint MixSeed(int seed, uint salt)
-        {
-            var value = unchecked((uint)seed) ^ salt;
-            value ^= value >> 16;
-            value *= 0x7feb352du;
-            value ^= value >> 15;
-            value *= 0x846ca68bu;
-            value ^= value >> 16;
-            return value == 0 ? 1u : value;
         }
     }
 }

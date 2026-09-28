@@ -60,7 +60,6 @@ export const scenario = (kind: 'empty' | 'outline' | 'paths' | 'decorated' | 'pl
 export const trigger = (scope: string, action: string, payload?: any) => {
   if (scope === 'tool') { values[`tool.selectedSnapMask`] = payload; emit(); return; }
   switch (action) {
-    case 'TogglePanel': case 'SetPanelOpen': set('PanelOpen', payload ?? !get('PanelOpen')); break;
     case 'ToggleTool': set('PanelOpen', !get('PanelOpen')); break;
     case 'ClearPolygon': scenario('empty'); break;
     case 'SetPlannerMode': set('PlannerMode', payload); break;
@@ -73,12 +72,9 @@ export const trigger = (scope: string, action: string, payload?: any) => {
     case 'SetPlazaFenceEnabled': set('PlazaFenceEnabled', payload); replanPlaza(); break;
     case 'SelectPlazaCenter': set('PlazaCenterSelected', payload); replanPlaza(); break;
     case 'GeneratePaths': set('PathBuildStatus', 'ok'); if (get('SiteType') === 1) { generatePlaza(); break; } seed++; set('PathPlanReady', true); set('DecorationPlanReady', true); set('PathBuildSummary', `Mock-Seed ${seed}`); recalculate(); break;
-    case 'BuildPaths': set('PathBuildPresent', true); break;
     case 'BuildPark': void buildEntirePark(); break;
     case 'RemoveBuiltPaths': set('PathBuildPresent', false); set('DecorationBuildPresent', false); set('DecorationPlanReady', false); break;
     case 'GenerateDecorations': seed++; if (get('SiteType') === 1 && get('DecorationPlanReady')) { void rollPlazaVariant(true); break; } set('DecorationPlanReady', true); set('DecorationSummary', `Mock-Seed ${seed}`); recalculate(); break;
-    case 'BuildDecorations': set('DecorationBuildPresent', true); break;
-    case 'RemoveBuiltDecorations': set('DecorationBuildPresent', false); break;
     case 'FinishPark': scenario('empty'); break;
     case 'SetVegetationDensity': set('VegetationDensity', payload); set('DecorationPlanReady', false); break;
     case 'SetFurnitureDensity': set('FurnitureDensity', payload); if (get('SiteType') === 1) replanPlaza(); else set('DecorationPlanReady', false); break;

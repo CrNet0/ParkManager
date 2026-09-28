@@ -175,7 +175,7 @@ namespace ParkManager.Geometry
                     var da = math.normalizesafe(nodes[a].Position - center);
                     var db = math.normalizesafe(nodes[b].Position - center);
                     if (math.dot(da, db) > -0.985f
-                        || DistanceToSegmentSquared(center,
+                        || PolygonMath.DistanceToSegmentSquared(center,
                             nodes[a].Position, nodes[b].Position) > 0.5625f)
                         continue;
 
@@ -298,7 +298,7 @@ namespace ParkManager.Geometry
                 }
             }
 
-            var area = Math.Abs(SignedArea(polygon));
+            var area = Math.Abs(PolygonMath.SignedArea(polygon));
             var components = CountComponents(adjacency);
             var loops = Math.Max(0, Edges.Count - Nodes.Count + components);
             var wantedLoops = area > 12000.0 ? 2 : area > 1800.0 ? 1 : 0;
@@ -387,7 +387,7 @@ namespace ParkManager.Geometry
             for (var sample = 0; sample <= 8; sample++)
             {
                 var point = math.lerp(chain[i], chain[i + 1], sample / 8f);
-                if (!PointInsideOrBoundary(point, polygon)) return false;
+                if (!PolygonMath.PointInsideOrBoundary(point, polygon)) return false;
             }
             return true;
         }
@@ -395,13 +395,7 @@ namespace ParkManager.Geometry
         private double CoveragePenalty(IReadOnlyList<float2> polygon)
         {
             if (polygon == null || polygon.Count < 3) return 0.0;
-            var min = polygon[0];
-            var max = polygon[0];
-            for (var i = 1; i < polygon.Count; i++)
-            {
-                min = math.min(min, polygon[i]);
-                max = math.max(max, polygon[i]);
-            }
+            PolygonMath.Bounds(polygon, out var min, out var max);
 
             double total = 0.0;
             var samples = 0;
@@ -411,10 +405,10 @@ namespace ParkManager.Geometry
             {
                 var point = math.lerp(min, max,
                     new float2((float)x / steps, (float)y / steps));
-                if (!PointInsideOrBoundary(point, polygon)) continue;
+                if (!PolygonMath.PointInsideOrBoundary(point, polygon)) continue;
                 var nearest = float.MaxValue;
                 for (var edge = 0; edge < Edges.Count; edge++)
-                    nearest = math.min(nearest, DistanceToSegmentSquared(point,
+                    nearest = math.min(nearest, PolygonMath.DistanceToSegmentSquared(point,
                         Nodes[Edges[edge].A].Position,
                         Nodes[Edges[edge].B].Position));
                 total += Math.Sqrt(nearest);
@@ -467,45 +461,6 @@ namespace ParkManager.Geometry
                 }
             }
             return Math.Max(1, components);
-        }
-
-        private static double SignedArea(IReadOnlyList<float2> polygon)
-        {
-            if (polygon == null || polygon.Count < 3) return 0.0;
-            double area = 0.0;
-            for (var i = 0; i < polygon.Count; i++)
-            {
-                var a = polygon[i];
-                var b = polygon[(i + 1) % polygon.Count];
-                area += (double)a.x * b.y - (double)b.x * a.y;
-            }
-            return area * 0.5;
-        }
-
-        private static bool PointInsideOrBoundary(float2 point,
-            IReadOnlyList<float2> polygon)
-        {
-            var inside = false;
-            for (int i = 0, j = polygon.Count - 1; i < polygon.Count; j = i++)
-            {
-                var a = polygon[j];
-                var b = polygon[i];
-                if (DistanceToSegmentSquared(point, a, b) < 0.01f) return true;
-                if ((a.y > point.y) != (b.y > point.y)
-                    && point.x < (b.x - a.x) * (point.y - a.y)
-                       / (b.y - a.y) + a.x) inside = !inside;
-            }
-            return inside;
-        }
-
-        private static float DistanceToSegmentSquared(float2 point, float2 a,
-            float2 b)
-        {
-            var ab = b - a;
-            var length = math.lengthsq(ab);
-            if (length < 0.0001f) return math.distancesq(point, a);
-            var t = math.clamp(math.dot(point - a, ab) / length, 0f, 1f);
-            return math.distancesq(point, a + ab * t);
         }
 
         private static int FindOrAddNode(List<ParkPathNode> nodes, float2 point,

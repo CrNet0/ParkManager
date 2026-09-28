@@ -125,7 +125,7 @@ namespace ParkManager.Tools
             => writer.Write(EmptyPasses);
         public void Deserialize<TReader>(TReader reader) where TReader : IReader
         {
-            reader.Read(out int ignored);
+            reader.Read(out int _);
             // Recheck references after loading instead of trusting an old pass.
             EmptyPasses = 0;
         }

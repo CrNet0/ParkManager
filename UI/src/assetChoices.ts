@@ -1,7 +1,7 @@
 /** Asset catalog DTOs kept separate from workflow rendering. */
 export type AssetChoiceOption = { name: string; icon: string };
 
-export type AssetChoiceState = {
+type AssetChoiceState = {
   selected: string;
   selectedMany: string[];
   options: AssetChoiceOption[];
@@ -18,15 +18,20 @@ export const assetCategories = [
   { key: "trashbin", payload: "TrashBin", multi: false, kind: 6 },
 ] as const;
 
-export const plazaAssetCategories = assetCategories.map((item) =>
-  item.key === "bush"
-    ? { key: "plazaplanter", payload: "PlazaPlanter", multi: true, kind: 2 }
-    : item);
+/**
+ * Normalizes published options. An icon is optional because many valid game
+ * prefabs expose no UIObject icon or thumbnail; plain strings are tolerated
+ * because an old payload may survive for one frame during a hot reload.
+ */
+export const parseOptions = (options: unknown[]): AssetChoiceOption[] =>
+  options.map((option) => typeof option === "string"
+    ? { name: option, icon: "" }
+    : {
+        name: typeof (option as any)?.name === "string" ? (option as any).name : "",
+        icon: typeof (option as any)?.icon === "string" ? (option as any).icon : "",
+      }).filter((option) => option.name.trim().length > 0);
 
-export type AssetCategory = typeof assetCategories[number];
-
-/** Parses the version-tolerant JSON bridge. An icon is optional because many
- * valid game prefabs do not expose a UIObject icon or thumbnail. */
+/** Parses the version-tolerant JSON bridge. */
 export const parseAssetChoices = (json: string): AssetChoiceMap => {
   try {
     const parsed = JSON.parse(json);
@@ -41,16 +46,7 @@ export const parseAssetChoices = (json: string): AssetChoiceMap => {
           ? state.selectedMany.filter((name: unknown): name is string =>
               typeof name === "string")
           : [],
-        // Old string payloads may survive for one frame during a hot reload.
-        options: state.options.map((option: unknown) => typeof option === "string"
-          ? { name: option, icon: "" }
-          : {
-              name: typeof (option as any)?.name === "string"
-                ? (option as any).name : "",
-              icon: typeof (option as any)?.icon === "string"
-                ? (option as any).icon : "",
-            }).filter((option: AssetChoiceOption) =>
-              option.name.trim().length > 0),
+        options: parseOptions(state.options),
       };
     });
     return result;

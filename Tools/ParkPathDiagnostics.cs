@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using Game.Common;
 using Game.Net;
@@ -43,25 +42,13 @@ namespace ParkManager.Tools
                 if (length < SuspiciousPathLength) shortEdges++;
             }
 
-            var degree0 = 0;
-            var degree1 = 0;
-            var degree2 = 0;
-            var degree3Plus = 0;
-            for (var i = 0; i < degrees.Length; i++)
-            {
-                if (degrees[i] == 0) degree0++;
-                else if (degrees[i] == 1) degree1++;
-                else if (degrees[i] == 2) degree2++;
-                else degree3Plus++;
-            }
-
             var average = _pathPlan.Edges.Count == 0
                 ? 0f : total / _pathPlan.Edges.Count;
             if (minimum == float.MaxValue) minimum = 0f;
             Mod.Log.Info($"{PathDiagnosticPrefix} PLAN seed={_pathPlan.Seed} "
                 + $"prefab='{_selectedPathPrefabName}' nodes={_pathPlan.Nodes.Count} "
                 + $"edges={_pathPlan.Edges.Count} degree[0/1/2/3+]="
-                + $"{degree0}/{degree1}/{degree2}/{degree3Plus} "
+                + $"{DegreeHistogram(degrees)} "
                 + $"length[min/avg/max]={minimum:F2}/{average:F2}/{maximum:F2}m "
                 + $"short<{SuspiciousPathLength:F1}m={shortEdges}.");
 
@@ -167,25 +154,15 @@ namespace ParkManager.Tools
                 }
             }
 
-            var degree0 = 0;
-            var degree1 = 0;
-            var degree2 = 0;
-            var degree3Plus = 0;
-            foreach (var node in ownedNodes)
-            {
-                var degree = NodeDegree(node);
-                if (degree == 0) degree0++;
-                else if (degree == 1) degree1++;
-                else if (degree == 2) degree2++;
-                else degree3Plus++;
-            }
+            var nodeDegrees = new List<int>(ownedNodes.Count);
+            foreach (var node in ownedNodes) nodeDegrees.Add(NodeDegree(node));
 
             if (minLength == float.MaxValue) minLength = 0f;
             var averageLength = ownedEdges.Count == 0
                 ? 0f : totalLength / ownedEdges.Count;
             var summary = $"{PathDiagnosticPrefix} PERMANENT park={park.Index}:"
                 + $"{park.Version} edges={ownedEdges.Count} nodes={ownedNodes.Count} "
-                + $"degree[0/1/2/3+]={degree0}/{degree1}/{degree2}/{degree3Plus} "
+                + $"degree[0/1/2/3+]={DegreeHistogram(nodeDegrees)} "
                 + $"length[min/avg/max]={minLength:F2}/{averageLength:F2}/"
                 + $"{maxLength:F2}m short<{SuspiciousPathLength:F1}m={shortEdges} "
                 + $"missing[curve/edgeGeometry/composition]={missingCurve}/"
@@ -199,13 +176,12 @@ namespace ParkManager.Tools
                 Mod.Log.Info(summary);
 
             foreach (var edgeEntity in ownedEdges)
-                LogPermanentEdge(edgeEntity, ownedEdges, ownedNodes);
+                LogPermanentEdge(edgeEntity, ownedNodes);
             foreach (var nodeEntity in ownedNodes)
                 LogPermanentNode(nodeEntity, ownedEdges);
         }
 
-        private void LogPermanentEdge(Entity entity, HashSet<Entity> ownedEdges,
-            HashSet<Entity> ownedNodes)
+        private void LogPermanentEdge(Entity entity, HashSet<Entity> ownedNodes)
         {
             if (!EntityManager.HasComponent<Game.Net.Edge>(entity))
             {
@@ -215,20 +191,20 @@ namespace ParkManager.Tools
             }
 
             var edge = EntityManager.GetComponentData<Game.Net.Edge>(entity);
-            var curve = EntityManager.HasComponent<Game.Net.Curve>(entity)
+            var hasCurve = EntityManager.HasComponent<Game.Net.Curve>(entity);
+            var curve = hasCurve
                 ? EntityManager.GetComponentData<Game.Net.Curve>(entity)
                 : default;
-            var hasCurve = EntityManager.HasComponent<Game.Net.Curve>(entity);
             var length = hasCurve ? curve.m_Length : -1f;
             var chord = hasCurve ? math.distance(curve.m_Bezier.a, curve.m_Bezier.d) : -1f;
-            var composition = EntityManager.HasComponent<Composition>(entity)
-                ? EntityManager.GetComponentData<Composition>(entity)
-                : default;
-            var compositionDescription = EntityManager.HasComponent<Composition>(entity)
-                ? "edge=" + DescribeCompositionEntity(composition.m_Edge)
+            var compositionDescription = "missing";
+            if (EntityManager.HasComponent<Composition>(entity))
+            {
+                var composition = EntityManager.GetComponentData<Composition>(entity);
+                compositionDescription = "edge=" + DescribeCompositionEntity(composition.m_Edge)
                     + ",start=" + DescribeCompositionEntity(composition.m_StartNode)
-                    + ",end=" + DescribeCompositionEntity(composition.m_EndNode)
-                : "missing";
+                    + ",end=" + DescribeCompositionEntity(composition.m_EndNode);
+            }
             Mod.Log.Info($"{PathDiagnosticPrefix} EDGE {EntityLabel(entity)} "
                 + $"ends={EntityLabel(edge.m_Start)}->{EntityLabel(edge.m_End)} "
                 + $"ownedEnds={ownedNodes.Contains(edge.m_Start)}/"
@@ -254,6 +230,15 @@ namespace ParkManager.Tools
                 + $"{OwnedNodeDegree(entity, ownedEdges)} "
                 + $"hidden={EntityManager.HasComponent<Hidden>(entity)} "
                 + $"overridden={EntityManager.HasComponent<Overridden>(entity)}.");
+        }
+
+        /// <summary>Counts of degree 0/1/2/3+; unknown (-1) counts as 3+.</summary>
+        private static string DegreeHistogram(IReadOnlyList<int> degrees)
+        {
+            var buckets = new int[4];
+            for (var i = 0; i < degrees.Count; i++)
+                buckets[degrees[i] >= 0 && degrees[i] < 3 ? degrees[i] : 3]++;
+            return string.Join("/", buckets);
         }
 
         private int NodeDegree(Entity node)

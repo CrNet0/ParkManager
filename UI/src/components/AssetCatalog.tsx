@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { AssetChoiceMap, assetCategories, plazaAssetCategories } from "../assetChoices";
+import { AssetChoiceMap, assetCategories } from "../assetChoices";
 import { selectAsset, setFurnitureDensity, setVegetationDensity,
   toggleDecorationCategory } from "../bindings";
+import { AssetIcon, scrollTileGrid, useIconFailures } from "./AssetIcon";
 import { RangeSlider } from "./RangeSlider";
 import { Texts } from "../i18n";
 import styles from "../panel.module.less";
@@ -15,35 +16,23 @@ type Props = {
   enabledMask: number;
   decorationBuildPresent: boolean;
   decorationPlanReady: boolean;
-  isPlaza?: boolean;
 };
 
 /** Stable two-column catalog: category tiles left, scrollable assets right. */
 export const AssetCatalog = ({ t, choices, busy, vegetationDensity,
   furnitureDensity, enabledMask,
-  decorationBuildPresent, decorationPlanReady, isPlaza = false }: Props) => {
-  const categories: ReadonlyArray<{
-    key: string; payload: string; multi: boolean; kind: number;
-  }> = isPlaza ? plazaAssetCategories : assetCategories;
+  decorationBuildPresent, decorationPlanReady }: Props) => {
   const [openKey, setOpenKey] = useState("tree");
-  const [failedIcons, setFailedIcons] = useState<Record<string, boolean>>({});
+  const icons = useIconFailures();
   const gridRef = useRef<HTMLDivElement | null>(null);
-  const category = categories.find((item) => item.key === openKey)
-    || categories[0];
+  const category = assetCategories.find((item) => item.key === openKey)
+    || assetCategories[0];
   const choice = choices[category.key];
 
   useEffect(() => {
     if (gridRef.current) gridRef.current.scrollTop = 0;
   }, [openKey]);
 
-  const iconFailed = (icon: string) => setFailedIcons((current) =>
-    current[icon] ? current : { ...current, [icon]: true });
-  const scroll = (direction: number) => {
-    const grid = gridRef.current;
-    if (!grid) return;
-    const tile = grid.querySelector("button");
-    grid.scrollTop += direction * (tile ? tile.getBoundingClientRect().height : 78) * 2;
-  };
   return <>
     <div className={styles.assetStageTop}>
       <div className={styles.assetStageHeader} data-testid="asset-header">
@@ -73,15 +62,14 @@ export const AssetCatalog = ({ t, choices, busy, vegetationDensity,
     </div>
     </div>
     <div className={styles.assetWorkspace} data-testid="asset-workspace">
-      <div className={styles.assetGrid} data-testid="asset-grid">{categories.map((item) => {
+      <div className={styles.assetGrid} data-testid="asset-grid">{assetCategories.map((item) => {
         const itemChoice = choices[item.key];
         const selectedMany = itemChoice?.selectedMany ?? [];
         const selected = itemChoice?.selected || "";
-        const option = item.multi
-          ? itemChoice?.options.find((candidate) => selectedMany.includes(candidate.name)
-              && !failedIcons[candidate.icon])
-          : itemChoice?.options.find((candidate) => candidate.name === selected
-              && !failedIcons[candidate.icon]);
+        // Show the first chosen asset whose thumbnail actually loads.
+        const option = itemChoice?.options.find((candidate) =>
+          (item.multi ? selectedMany.includes(candidate.name)
+            : candidate.name === selected) && icons.usable(candidate.icon));
         const count = item.multi ? selectedMany.length : (selected ? 1 : 0);
         const label = t.categories[item.key];
         const enabled = (enabledMask & (1 << (item.kind - 1))) !== 0;
@@ -91,10 +79,8 @@ export const AssetCatalog = ({ t, choices, busy, vegetationDensity,
           title={t.openAssets(label)} onClick={() => setOpenKey(item.key)}>
           <span className={styles.assetTileLabel}>{label}</span>
           <span className={styles.assetTileVisual}>
-            {option?.icon
-              ? <img className={styles.assetIcon} src={option.icon} alt=""
-                  onError={() => iconFailed(option.icon)} />
-              : <span className={styles.assetFallback}>{label.charAt(0)}</span>}
+            <AssetIcon icon={option?.icon} icons={icons} className={styles.assetIcon}
+              fallback={<span className={styles.assetFallback}>{label.charAt(0)}</span>} />
           </span>
           <span className={styles.assetTileCount}>{count > 0
             ? (item.multi ? t.activeMany(count) : t.activeOne) : t.automatic}</span>
@@ -126,9 +112,9 @@ export const AssetCatalog = ({ t, choices, busy, vegetationDensity,
                 className={`${styles.assetChoiceTile} ${active ? styles.assetChoiceTileActive : ""}`}
                 disabled={busy} title={label} aria-label={label} aria-pressed={active}
                 onClick={() => selectAsset(category.payload, option.name, category.multi)}>
-                {option.icon && !failedIcons[option.icon] ? <img className={styles.assetChoiceIcon} src={option.icon}
-                    alt="" onError={() => iconFailed(option.icon)} />
-                  : <span className={styles.assetChoiceFallback}>✦</span>}
+                <AssetIcon icon={option.icon} icons={icons}
+                  className={styles.assetChoiceIcon}
+                  fallback={<span className={styles.assetChoiceFallback}>✦</span>} />
                 <span className={styles.assetChoiceName}>{label}</span>
                 {active ? <span className={styles.assetChoiceCheck}>✓</span> : null}
               </button>;
@@ -136,9 +122,9 @@ export const AssetCatalog = ({ t, choices, busy, vegetationDensity,
           </div>
           <div className={styles.assetScrollControls}>
             <button title={t.scrollAssetsUp} aria-label={t.scrollAssetsUp}
-              onClick={() => scroll(-1)}>▲</button>
+              onClick={() => scrollTileGrid(gridRef.current, -1)}>▲</button>
             <button title={t.scrollAssetsDown} aria-label={t.scrollAssetsDown}
-              onClick={() => scroll(1)}>▼</button>
+              onClick={() => scrollTileGrid(gridRef.current, 1)}>▼</button>
           </div>
         </div> : <div className={styles.assetChooserEmpty}>{t.chooseCategory}</div>}
       </div>

@@ -24,10 +24,10 @@ namespace ParkManager.Geometry
             float centerFootprintRadius)
         {
             if (polygon == null || polygon.Count < 3
-                || !IsFinite(centerFootprintRadius)) return false;
+                || !math.isfinite(centerFootprintRadius)) return false;
             var radius = math.max(2f, centerFootprintRadius);
             if (!TryChooseCenter(polygon, radius, out var center)) return false;
-            return DistanceToBoundarySquared(center, polygon)
+            return PolygonMath.DistanceToBoundarySquared(center, polygon)
                 >= (radius + CenterSafetyMargin) * (radius + CenterSafetyMargin);
         }
 
@@ -55,7 +55,7 @@ namespace ParkManager.Geometry
                     furniture);
 
             var radius = includeCenterpiece
-                && IsFinite(centerFootprintRadius)
+                && math.isfinite(centerFootprintRadius)
                 ? math.max(0f, centerFootprintRadius) : 0f;
             float2 center;
             if (!TryChooseCenter(polygon, radius, out center))
@@ -98,8 +98,8 @@ namespace ParkManager.Geometry
                 for (var i = 0; i < positions.Count; i++)
                 {
                     var point = positions[i];
-                    if (PointInsideOrBoundary(point, polygon)
-                        && DistanceToBoundarySquared(point, polygon)
+                    if (PolygonMath.PointInsideOrBoundary(point, polygon)
+                        && PolygonMath.DistanceToBoundarySquared(point, polygon)
                             >= (radius + CenterSafetyMargin)
                             * (radius + CenterSafetyMargin)) continue;
                     allFit = false;
@@ -209,11 +209,11 @@ namespace ParkManager.Geometry
                     ? 0f : anchor.Rotation + math.PI;
                 if (!FurniturePointValid(first, item.FootprintRadius,
                         centerpieces, polygon, entrances,
-                        proposed, item.Kind, arrangementId,
+                        proposed, arrangementId,
                         placementMode, spacing)
                     || !FurniturePointValid(second, item.FootprintRadius,
                         centerpieces, polygon,
-                        entrances, proposed, item.Kind,
+                        entrances, proposed,
                         arrangementId, placementMode, spacing)) return false;
                 proposed.Add(new PlazaFurniturePlacement
                 {
@@ -264,7 +264,7 @@ namespace ParkManager.Geometry
                 var first = anchor.Position + anchor.Tangent * offset;
                 if (!FurniturePointValid(first, item.FootprintRadius,
                         centerpieces, polygon, entrances, proposed,
-                        item.Kind, arrangementId,
+                        arrangementId,
                         PlazaArrangementPlacementMode.AlongBoundary, spacing))
                     return false;
                 proposed.Add(new PlazaFurniturePlacement
@@ -282,7 +282,7 @@ namespace ParkManager.Geometry
                     var second = ReflectPoint(first, mirrorNormal, mirrorOffset);
                     if (!FurniturePointValid(second, item.FootprintRadius,
                             centerpieces, polygon, entrances, proposed,
-                            item.Kind, arrangementId,
+                            arrangementId,
                             PlazaArrangementPlacementMode.AlongBoundary, spacing))
                         return false;
                     proposed.Add(new PlazaFurniturePlacement
@@ -626,16 +626,16 @@ namespace ParkManager.Geometry
             IReadOnlyList<PlazaCenterpiecePlacement> centerpieces,
             IReadOnlyList<float2> polygon, IReadOnlyList<float2> entrances,
             IReadOnlyList<PlazaFurniturePlacement> accepted,
-            PlazaFurnitureKind kind, int arrangementId,
+            int arrangementId,
             PlazaArrangementPlacementMode placementMode, float spacing)
         {
             var boundaryGap = placementMode
                     == PlazaArrangementPlacementMode.AlongBoundary
                 ? spacing : FurnitureBoundaryClearance;
             var clearance = footprintRadius + boundaryGap;
-            if (!PointInsideOrBoundary(point, polygon)
-                || DistanceToBoundarySquared(point, polygon) < clearance * clearance
-                || DistanceToPointsSquared(point, entrances)
+            if (!PolygonMath.PointInsideOrBoundary(point, polygon)
+                || PolygonMath.DistanceToBoundarySquared(point, polygon) < clearance * clearance
+                || PolygonMath.DistanceToPointsSquared(point, entrances)
                     < EntranceFurnitureClearance * EntranceFurnitureClearance)
                 return false;
 
@@ -668,19 +668,12 @@ namespace ParkManager.Geometry
             float requiredClearance, out float2 center)
         {
             center = PolygonCentroid(polygon);
-            if (PointInsideOrBoundary(center, polygon)
-                && DistanceToBoundarySquared(center, polygon)
+            if (PolygonMath.PointInsideOrBoundary(center, polygon)
+                && PolygonMath.DistanceToBoundarySquared(center, polygon)
                     >= requiredClearance * requiredClearance)
                 return true;
 
-            var min = polygon[0];
-            var max = polygon[0];
-            for (var i = 1; i < polygon.Count; i++)
-            {
-                min = math.min(min, polygon[i]);
-                max = math.max(max, polygon[i]);
-            }
-
+            PolygonMath.Bounds(polygon, out var min, out var max);
             var bestClearance = -1f;
             const int grid = 32;
             for (var y = 0; y <= grid; y++)
@@ -688,8 +681,8 @@ namespace ParkManager.Geometry
             {
                 var t = new float2((float)x / grid, (float)y / grid);
                 var point = math.lerp(min, max, t);
-                if (!PointInsideOrBoundary(point, polygon)) continue;
-                var clearance = DistanceToBoundarySquared(point, polygon);
+                if (!PolygonMath.PointInsideOrBoundary(point, polygon)) continue;
+                var clearance = PolygonMath.DistanceToBoundarySquared(point, polygon);
                 if (clearance <= bestClearance) continue;
                 bestClearance = clearance;
                 center = point;
@@ -738,55 +731,6 @@ namespace ParkManager.Geometry
             while (angle >= full) angle -= full;
             return angle;
         }
-
-        private static bool PointInsideOrBoundary(float2 point,
-            IReadOnlyList<float2> polygon)
-        {
-            var inside = false;
-            for (int i = 0, j = polygon.Count - 1; i < polygon.Count; j = i++)
-            {
-                var a = polygon[j];
-                var b = polygon[i];
-                if (DistanceToSegmentSquared(point, a, b) < 0.01f) return true;
-                if ((a.y > point.y) != (b.y > point.y)
-                    && point.x < (b.x - a.x) * (point.y - a.y)
-                       / (b.y - a.y) + a.x)
-                    inside = !inside;
-            }
-            return inside;
-        }
-
-        private static float DistanceToBoundarySquared(float2 point,
-            IReadOnlyList<float2> polygon)
-        {
-            var nearest = float.MaxValue;
-            for (var i = 0; i < polygon.Count; i++)
-                nearest = math.min(nearest, DistanceToSegmentSquared(point,
-                    polygon[i], polygon[(i + 1) % polygon.Count]));
-            return nearest;
-        }
-
-        private static float DistanceToPointsSquared(float2 point,
-            IReadOnlyList<float2> points)
-        {
-            if (points == null || points.Count == 0) return float.MaxValue;
-            var nearest = float.MaxValue;
-            for (var i = 0; i < points.Count; i++)
-                nearest = math.min(nearest, math.distancesq(point, points[i]));
-            return nearest;
-        }
-
-        private static float DistanceToSegmentSquared(float2 point, float2 a, float2 b)
-        {
-            var ab = b - a;
-            var length = math.lengthsq(ab);
-            if (length < 0.0001f) return math.distancesq(point, a);
-            var t = math.clamp(math.dot(point - a, ab) / length, 0f, 1f);
-            return math.distancesq(point, a + ab * t);
-        }
-
-        private static bool IsFinite(float value)
-            => !float.IsNaN(value) && !float.IsInfinity(value);
 
         private struct FurniturePairCandidate
         {

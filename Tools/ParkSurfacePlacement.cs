@@ -8,7 +8,7 @@ namespace ParkManager.Tools
 {
     public sealed partial class ParkToolSystem
     {
-        private bool CreateParkSurface(Entity prefab,
+        private bool CreatePolygonArea(Entity prefab,
             ref TerrainHeightData heightData)
         {
             if (_points.Count < 3) return false;

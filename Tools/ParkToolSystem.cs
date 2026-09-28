@@ -58,25 +58,30 @@ namespace ParkManager.Tools
         public override PrefabBase GetPrefab() => null;
         public override bool TrySetPrefab(PrefabBase prefab) => false;
 
+        private bool IsPlaza => _selectedSiteKind == ProceduralSiteKind.Plaza;
+
+        /// <summary>A running path or furnishing build blocks all edits.</summary>
+        private bool BuildBusy => PathBuildBusy || DecorationBuildBusy;
+
+        /// <summary>Outline and entrances are fixed while a build exists or runs.</summary>
+        private bool OutlineLocked => HasBuiltPaths || BuildBusy;
+
         internal void SetSiteKind(int value)
         {
-            if (HasBuiltPaths || PathBuildBusy || DecorationBuildBusy) return;
+            if (OutlineLocked) return;
             var nextKind = value == (int)ProceduralSiteKind.Plaza
                 ? ProceduralSiteKind.Plaza
                 : ProceduralSiteKind.Park;
             if (_selectedSiteKind == nextKind) return;
             _selectedSiteKind = nextKind;
             _pedestrianPathPrefab = Unity.Entities.Entity.Null;
-            _pathPlan = null;
             _plazaPlan = null;
-            _decorationPlan = null;
-            _pathPreview.Clear();
+            DiscardPathAndDecorationPlans();
             PublishPlannerState();
-            PublishDecorationState("Noch keine Ausstattung geplant.");
             _ui?.SetSiteType((int)_selectedSiteKind);
-            PublishState(_selectedSiteKind == ProceduralSiteKind.Plaza
-                ? "Plaza als Flächentyp ausgewählt."
-                : "Park als Flächentyp ausgewählt.");
+            PublishState(IsPlaza
+                ? UiText.Of("status.plazaSelected")
+                : UiText.Of("status.parkSelected"));
         }
 
         [Preserve]
@@ -88,9 +93,8 @@ namespace ParkManager.Tools
             InitializePathPlacement();
             InitializeDecorationPlacement();
             InitializeSnappingTargets();
-            ConfigureSnapping();
             PublishPlazaArrangement();
-            PublishPathBuildState("Noch kein Park in dieser Spielsitzung gebaut.");
+            PublishPathBuildState(UiText.Of("path.noParkThisSession"));
         }
 
         [Preserve]
@@ -103,7 +107,7 @@ namespace ParkManager.Tools
             if (cancelAction != null) cancelAction.shouldBeEnabled = true;
             _ui.SetToolActive(true);
             MonitorExternalPathEdits(true);
-            PublishState("Linksklick setzt Punkte; ersten Punkt anklicken zum Schließen.");
+            PublishState(UiText.Of("status.drawHint"));
             Mod.Log.Info("ParkManager polygon tool activated.");
         }
 
@@ -112,10 +116,10 @@ namespace ParkManager.Tools
         {
             _buildDecorationsAfterPaths = false;
             if (PathBuildBusy && _pathBuildPhase != PathBuildPhase.ClearRequested)
-                AbortPathBuild("Werkzeug während des Wegebaus verlassen.");
+                AbortPathBuild(UiText.Of("path.toolLeft"));
             if (DecorationBuildBusy
                 && _decorationBuildPhase != DecorationBuildPhase.ClearRequested)
-                AbortDecorationBuild("Werkzeug während des Ausstattungsbaus verlassen.");
+                AbortDecorationBuild(UiText.Of("decoration.toolLeft"));
             _ui?.SetToolActive(false);
             base.OnStopRunning();
         }
@@ -190,8 +194,7 @@ namespace ParkManager.Tools
 
         private void HandleLeftClick()
         {
-            if (!_hasHover || HasBuiltPaths || PathBuildBusy
-                || DecorationBuildBusy) return;
+            if (!_hasHover || OutlineLocked) return;
             InvalidatePlannerData();
             if (_closed)
             {
@@ -221,9 +224,9 @@ namespace ParkManager.Tools
                             _worldPoints.RemoveAt(insertIndex);
                             RemoveSnapAxis(insertIndex);
                             DiscardLastUndo();
-                            PublishState("Teilung würde ein ungültiges Polygon erzeugen.");
+                            PublishState(UiText.Of("status.splitInvalid"));
                         }
-                        else PublishState("Polygonseite per Doppelklick geteilt.");
+                        else PublishState(UiText.Of("status.edgeSplit"));
                         ResetEdgeDoubleClick();
                     }
                     else
@@ -240,8 +243,8 @@ namespace ParkManager.Tools
             {
                 _closed = true;
                 PublishState(IsValidPolygon()
-                    ? "Polygon geschlossen und gültig; Punkte können verschoben werden."
-                    : "Polygon geschlossen, aber geometrisch ungültig.");
+                    ? UiText.Of("status.polygonClosedValid")
+                    : UiText.Of("status.polygonClosedInvalid"));
                 return;
             }
 
@@ -252,7 +255,7 @@ namespace ParkManager.Tools
                 _worldPoints.Add(_hover);
                 StoreSnapAxis(_points.Count - 1);
             }
-            PublishState("Weitere Punkte setzen oder den ersten Punkt anklicken.");
+            PublishState(UiText.Of("status.addMorePoints"));
         }
 
         private void UpdatePointDrag()
@@ -273,16 +276,15 @@ namespace ParkManager.Tools
                 _worldPoints[_dragPoint] = _pointWorldStart;
                 RestoreSnapAxis(_dragPoint, _dragStartAxis);
                 DiscardLastUndo();
-                PublishState("Ungültige Verschiebung verworfen.");
+                PublishState(UiText.Of("status.moveRejected"));
             }
-            else PublishState("Punkt verschoben.");
+            else PublishState(UiText.Of("status.pointMoved"));
             _dragPoint = -1;
         }
 
         private void HandleRightClick()
         {
-            if (_points.Count == 0 || HasBuiltPaths || PathBuildBusy
-                || DecorationBuildBusy) return;
+            if (_points.Count == 0 || OutlineLocked) return;
             PushUndo();
             InvalidatePlannerData();
             if (_hoverPoint >= 0)
@@ -291,12 +293,12 @@ namespace ParkManager.Tools
                 _worldPoints.RemoveAt(_hoverPoint);
                 RemoveSnapAxis(_hoverPoint);
                 if (_points.Count < 3) _closed = false;
-                PublishState("Punkt entfernt.");
+                PublishState(UiText.Of("status.pointRemoved"));
             }
             else if (_closed)
             {
                 _closed = false;
-                PublishState("Polygon geöffnet.");
+                PublishState(UiText.Of("status.polygonOpened"));
             }
             else
             {
@@ -304,16 +306,15 @@ namespace ParkManager.Tools
                 _points.RemoveAt(last);
                 _worldPoints.RemoveAt(last);
                 RemoveSnapAxis(last);
-                PublishState("Letzten Punkt entfernt.");
+                PublishState(UiText.Of("status.lastPointRemoved"));
             }
         }
 
         internal void ClearPolygon()
         {
-            if (HasBuiltPaths || PathBuildBusy || DecorationBuildBusy)
+            if (OutlineLocked)
             {
-                PublishState("Der Umriss eines gebauten Parks ist gesperrt. "
-                    + "Zum Neuzeichnen zuerst den Park entfernen oder fertigstellen.");
+                PublishState(UiText.Of("status.outlineLockedRedraw"));
                 return;
             }
             if (_points.Count == 0) return;
@@ -326,7 +327,7 @@ namespace ParkManager.Tools
             _plannerMode = false;
             InvalidatePlannerData();
             ResetEdgeDoubleClick();
-            PublishState("Polygon zurückgesetzt; neuen ersten Punkt setzen.");
+            PublishState(UiText.Of("status.polygonReset"));
         }
 
         private void UpdateHoverTargets()
@@ -359,7 +360,7 @@ namespace ParkManager.Tools
             var bestEdge = EdgeHitDistance * EdgeHitDistance;
             for (var i = 0; i < _points.Count; i++)
             {
-                var distance = DistanceToSegmentSquared(cursor, _points[i],
+                var distance = PolygonMath.DistanceToSegmentSquared(cursor, _points[i],
                     _points[(i + 1) % _points.Count]);
                 if (distance < bestEdge) { bestEdge = distance; _hoverEdge = i; }
             }
@@ -367,9 +368,9 @@ namespace ParkManager.Tools
 
         internal void SetPlannerMode(bool enabled)
         {
-            if (PathBuildBusy || DecorationBuildBusy)
+            if (BuildBusy)
             {
-                PublishState("Der aktuelle Bau wird noch von CS2 verarbeitet.");
+                PublishState(UiText.Of("status.buildBusy"));
                 return;
             }
             if (_plannerMode == enabled) return;
@@ -377,32 +378,30 @@ namespace ParkManager.Tools
             {
                 if (HasBuiltPaths)
                 {
-                    PublishState("Der Umriss eines gebauten Parks bleibt gesperrt. "
-                        + "Zum Bearbeiten zuerst den Park entfernen.");
+                    PublishState(UiText.Of("status.outlineLockedEdit"));
                     return;
                 }
                 _plannerMode = false;
-                PublishState("Zeichenmodus aktiv; Polygon kann bearbeitet werden.");
+                PublishState(UiText.Of("status.drawMode"));
                 PublishPlannerState();
                 return;
             }
 
             if (!_closed || !IsValidPolygon())
             {
-                PublishState("Parkplaner benötigt ein geschlossenes, gültiges Polygon.");
+                PublishState(UiText.Of("status.plannerNeedsPolygon"));
                 return;
             }
 
             _dragPoint = -1;
             _plannerMode = true;
-            PublishState("Parkplaner aktiv; Linksklick auf eine Kante setzt einen Eingang.");
+            PublishState(UiText.Of("status.plannerActive"));
             PublishPlannerState();
         }
 
         private void HandlePlannerClick()
         {
-            if (!_hasHover || _hoverEdge < 0 || HasBuiltPaths
-                || PathBuildBusy || DecorationBuildBusy) return;
+            if (!_hasHover || _hoverEdge < 0 || OutlineLocked) return;
             var a = _worldPoints[_hoverEdge];
             var b = _worldPoints[(_hoverEdge + 1) % _worldPoints.Count];
             var ab = b.xz - a.xz;
@@ -413,85 +412,75 @@ namespace ParkManager.Tools
             for (var i = 0; i < _entrances.Count; i++)
                 if (math.distancesq(_entrances[i].xz, entrance.xz) < 16f)
                 {
-                    PublishState("Hier ist bereits ein Eingang markiert.");
+                    PublishState(UiText.Of("status.entranceExists"));
                     return;
                 }
             _entrances.Add(entrance);
-            _pathPlan = null;
-            _pathPreview.Clear();
-            _decorationPlan = null;
-            PublishDecorationState("Noch keine Ausstattung geplant.");
-            PublishState("Eingang markiert; weitere Eingänge setzen oder Wege erzeugen.");
+            DiscardPathAndDecorationPlans();
+            PublishState(UiText.Of("status.entranceAdded"));
             PublishPlannerState();
         }
 
         private void HandlePlannerRightClick()
         {
-            if (HasBuiltPaths || PathBuildBusy || DecorationBuildBusy) return;
+            if (OutlineLocked) return;
             if (_hoverEntrance < 0 || _hoverEntrance >= _entrances.Count)
             {
-                PublishState("Zum Entfernen direkt über einen Eingang hovern.");
+                PublishState(UiText.Of("status.hoverEntranceToRemove"));
                 return;
             }
             _entrances.RemoveAt(_hoverEntrance);
             _hoverEntrance = -1;
-            _pathPlan = null;
-            _pathPreview.Clear();
-            _decorationPlan = null;
-            PublishDecorationState("Noch keine Ausstattung geplant.");
-            PublishState("Eingang entfernt; Wegentwurf zurückgesetzt.");
+            DiscardPathAndDecorationPlans();
+            PublishState(UiText.Of("status.entranceRemoved"));
             PublishPlannerState();
         }
 
         internal void GeneratePaths()
         {
-            if (PathBuildBusy || DecorationBuildBusy || HasBuiltPaths)
+            if (OutlineLocked)
             {
                 PublishState(HasBuiltPaths
-                    ? "Zum Neuplanen zuerst den gebauten Park entfernen."
-                    : "Der aktuelle Bau wird noch von CS2 verarbeitet.");
+                    ? UiText.Of("status.removeParkToReplan")
+                    : UiText.Of("status.buildBusy"));
                 return;
             }
             if (!_plannerMode || !_closed || !IsValidPolygon())
             {
-                PublishState("Zuerst den Parkplaner für ein gültiges Polygon öffnen.");
+                PublishState(UiText.Of("status.openPlannerFirst"));
                 return;
             }
             if (_entrances.Count == 0)
             {
-                PublishState("Mindestens einen Eingang an einer Polygonkante markieren.");
+                PublishState(UiText.Of("status.needEntrance"));
                 return;
             }
 
             _pathPreview.Clear();
             _buildIssues.Clear();
             _preflightWarning = null;
-            if (_selectedSiteKind == ProceduralSiteKind.Plaza)
+            if (IsPlaza)
             {
-                PublishPathBuildState("Neue Plaza-Variante wird berechnet.");
+                PublishPathBuildState(UiText.Of("path.plazaVariantCalculating"));
                 // The first design uses the current settings; every further
                 // request is a new variant with rolled settings.
-                if (_plazaPlan != null) RollPlazaVariant(NewPlazaVariantSeed());
+                if (_plazaPlan != null) RollPlazaVariant(Seeds.NewSeed());
                 GeneratePlazaPlan();
                 return;
             }
             _plazaPlan = null;
-            PublishPathBuildState("Neue Wegvariante wird berechnet.");
-            var hub2 = FindInteriorHub();
-            var entrancePoints = new List<float2>(_entrances.Count);
-            for (var i = 0; i < _entrances.Count; i++)
-                entrancePoints.Add(_entrances[i].xz);
-            var familySeed = Guid.NewGuid().GetHashCode() & int.MaxValue;
-            if (familySeed == 0) familySeed = 1;
+            PublishPathBuildState(UiText.Of("path.variantCalculating"));
+            var hub = FindInteriorHub();
+            var entrancePoints = EntrancePoints();
+            var familySeed = Seeds.NewSeed();
             ParkPathPlan best = null;
             var bestScore = double.MaxValue;
             for (var i = 0; i < PathCandidateCount; i++)
             {
-                var seed = (int)(((long)familySeed + i * 104729L)
-                    % int.MaxValue);
-                if (seed == 0) seed = 1;
+                var seed = Seeds.NonZero((int)(((long)familySeed + i * 104729L)
+                    % int.MaxValue));
                 var candidate = ParkPathPlanner.Generate(_points, entrancePoints,
-                    hub2, seed);
+                    hub, seed);
                 var score = candidate.NaturalnessScore(_points);
                 if (!(score < bestScore)) continue;
                 best = candidate;
@@ -509,16 +498,14 @@ namespace ParkManager.Tools
             }
             if (_pathPlan.Edges.Count > 0)
             {
-                var decorationSeed = unchecked(_pathPlan.Seed * 1103515245 + 12345)
-                    & int.MaxValue;
-                if (decorationSeed == 0) decorationSeed = 1;
-                GenerateDecorationPlan(decorationSeed);
+                GenerateDecorationPlan(Seeds.NonZero(
+                    unchecked(_pathPlan.Seed * 1103515245 + 12345) & int.MaxValue));
             }
             PublishState(_pathPlan.Edges.Count > 0
-                ? $"Beste von {PathCandidateCount} Varianten erzeugt: "
-                    + $"Seed {_pathPlan.Seed}, {_pathPlan.Edges.Count} Segmente, "
-                    + $"{_pathPlan.TotalLength:F0} m, Bewertung {bestScore:F1}."
-                : "Für diese Eingänge konnte kein zusammenhängender Weg gefunden werden.");
+                ? UiText.Of("status.pathVariantCreated", PathCandidateCount,
+                    _pathPlan.Seed, _pathPlan.Edges.Count, _pathPlan.TotalLength,
+                    bestScore)
+                : UiText.Of("status.noConnectedPath"));
             PublishPlannerState();
         }
 
@@ -545,13 +532,7 @@ namespace ParkManager.Tools
 
         private float2 FindInteriorHub()
         {
-            var min = _points[0];
-            var max = _points[0];
-            for (var i = 1; i < _points.Count; i++)
-            {
-                min = math.min(min, _points[i]);
-                max = math.max(max, _points[i]);
-            }
+            PolygonMath.Bounds(_points, out var min, out var max);
             var best = _points[0];
             var bestClearance = -1f;
             const int steps = 16;
@@ -561,10 +542,8 @@ namespace ParkManager.Tools
                 var candidate = math.lerp(min, max,
                     new float2((float)x / steps, (float)y / steps));
                 if (!PointInside(candidate)) continue;
-                var clearance = float.MaxValue;
-                for (var i = 0; i < _points.Count; i++)
-                    clearance = math.min(clearance, DistanceToSegmentSquared(candidate,
-                        _points[i], _points[(i + 1) % _points.Count]));
+                var clearance = PolygonMath.DistanceToBoundarySquared(candidate,
+                    _points);
                 if (clearance > bestClearance)
                 {
                     bestClearance = clearance;
@@ -575,35 +554,38 @@ namespace ParkManager.Tools
         }
 
         private bool PointInside(float2 point)
-        {
-            var inside = false;
-            for (int i = 0, j = _points.Count - 1; i < _points.Count; j = i++)
-            {
-                var a = _points[i]; var b = _points[j];
-                if ((a.y > point.y) != (b.y > point.y)
-                    && point.x < (b.x - a.x) * (point.y - a.y)
-                       / (b.y - a.y) + a.x) inside = !inside;
-            }
-            return inside;
-        }
+            => PolygonMath.PointInside(point, _points);
 
         private void InvalidatePlannerData()
         {
             _entrances.Clear();
-            _pathPlan = null;
             _plazaPlan = null;
-            _pathPreview.Clear();
             _buildIssues.Clear();
-            _decorationPlan = null;
-            PublishDecorationState("Noch keine Ausstattung geplant.");
+            DiscardPathAndDecorationPlans();
             PublishPlannerState();
+        }
+
+        /// <summary>Drops the path/surface and furnishing previews.</summary>
+        private void DiscardPathAndDecorationPlans()
+        {
+            _pathPlan = null;
+            _pathPreview.Clear();
+            _decorationPlan = null;
+            PublishDecorationState(UiText.Of("decoration.none"));
+        }
+
+        /// <summary>Entrance positions in the XZ planning plane.</summary>
+        private List<float2> EntrancePoints()
+        {
+            var result = new List<float2>(_entrances.Count);
+            for (var i = 0; i < _entrances.Count; i++) result.Add(_entrances[i].xz);
+            return result;
         }
 
         private void PublishPlannerState()
             => _ui?.SetPlannerState(_plannerMode, _entrances.Count,
-                _selectedSiteKind == ProceduralSiteKind.Plaza
-                    ? _plazaPlan != null : _pathPlan != null
-                        && _pathPlan.Edges.Count > 0);
+                IsPlaza ? _plazaPlan != null
+                    : _pathPlan != null && _pathPlan.Edges.Count > 0);
 
         private bool CanClose() => !_closed && _points.Count >= 3 && _hasHover
             && math.distancesq(_hover.xz, _points[0]) <= CloseDistance * CloseDistance;
@@ -614,24 +596,15 @@ namespace ParkManager.Tools
             for (var i = 0; i < _points.Count; i++)
             for (var j = i + 1; j < _points.Count; j++)
             {
-                if (j == i || j == (i + 1) % _points.Count
-                    || i == (j + 1) % _points.Count) continue;
+                // Adjacent edges share a vertex and cannot cross properly.
+                if (j == i + 1 || i == (j + 1) % _points.Count) continue;
                 if (SegmentsCross(_points[i], _points[(i + 1) % _points.Count],
                     _points[j], _points[(j + 1) % _points.Count])) return false;
             }
             return true;
         }
 
-        private double SignedArea()
-        {
-            double sum = 0;
-            for (var i = 0; i < _points.Count; i++)
-            {
-                var a = _points[i]; var b = _points[(i + 1) % _points.Count];
-                sum += (double)a.x * b.y - (double)b.x * a.y;
-            }
-            return sum * 0.5;
-        }
+        private double SignedArea() => PolygonMath.SignedArea(_points);
 
         private static bool SegmentsCross(float2 a, float2 b, float2 c, float2 d)
         {
@@ -642,15 +615,6 @@ namespace ParkManager.Tools
 
         private static float Cross(float2 a, float2 b, float2 p)
             => (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
-
-        private static float DistanceToSegmentSquared(float2 p, float2 a, float2 b)
-        {
-            var ab = b - a;
-            var length = math.lengthsq(ab);
-            if (length < 0.0001f) return math.distancesq(p, a);
-            var t = math.clamp(math.dot(p - a, ab) / length, 0f, 1f);
-            return math.distancesq(p, a + ab * t);
-        }
 
         private static bool WorldInputAllowed()
         {
@@ -695,7 +659,7 @@ namespace ParkManager.Tools
             RestoreSnapAxes(snapshot.Axes);
             _closed = snapshot.Closed;
             _dragPoint = -1;
-            PublishState("Letzten Schritt rückgängig gemacht.");
+            PublishState(UiText.Of("status.undone"));
         }
 
         private void Restore(float2[] points, float3[] worldPoints)
@@ -731,9 +695,9 @@ namespace ParkManager.Tools
             var deps = JobHandle.CombineDependencies(inputDeps, overlayDeps);
             deps.Complete();
             ParkOverlay.Draw(buffer, _worldPoints, _closed, _hasHover, _hover,
-                CanClose(), _hoverPoint, _dragPoint, _hoverEdge, -1,
+                CanClose(), _hoverPoint, _dragPoint, _hoverEdge,
                 _plannerMode, _entrances, _hoverEntrance, _pathPreview,
-                _decorationPlan, _selectedSiteKind == ProceduralSiteKind.Plaza,
+                _decorationPlan, IsPlaza,
                 _buildIssues, LastSnap, HasSnapGuide, SnapGuide);
             return deps;
         }
