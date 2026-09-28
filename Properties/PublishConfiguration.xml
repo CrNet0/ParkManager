@@ -1,10 +1,31 @@
 <Publish>
-  <ModId Value="" />
+  <ModId Value="161179" />
   <DisplayName Value="ParkManager" />
   <ShortDescription Value="Design and build editable parks and plazas with custom surfaces, asset mixes and precise placement rules." />
   <LongDescription>
 ParkManager lets you draw park and plaza outlines, mark entrances, choose game assets and preview procedural layouts before building them as editable Cities: Skylines II entities.
-  </LongDescription>
+
+**Parks**
+- Draw and edit a park boundary, then mark its entrances on the outline.
+- Generate pedestrian paths that follow the shape of the site, narrow or wide, with a selectable ground surface.
+- Natural planting: groves of varying size and shape, a boundary belt with open views, benches, lamps and bins with separate density controls.
+- Choose specific vanilla assets or let ParkManager pick a coherent mix; optional fence with automatic entrance gaps.
+- Park lakes (experimental): a lake in the largest open space, excavated 5 m and filled with water. Can be switched off.
+- Larger parks get forest animal spawners.
+
+**Plazas**
+- One centerpiece, a mirrored pair, a set along an axis, or no centerpiece.
+- Furniture arrangements around the centerpiece or along the boundary, including your own sequence of up to five assets.
+- Plaza surfaces and an optional fence.
+
+Everything is previewed on the map before building. Built objects are normal game entities and stay editable; each build can be removed as a whole.
+
+**Known issues**
+- Lakes change the terrain permanently: removing the park removes the water, but the basin stays. Try lakes on a copy of your save first.
+- Unfinished outlines and previews are not saved with the game.
+
+Source code and bug reports: https://github.com/tomkpunkt/ParkManager
+</LongDescription>
   <Thumbnail Value="Properties/Thumbnail.png" />
   <Tag Value="Code Mod" />
   <ForumLink Value="" />
@@ -14,5 +35,5 @@ ParkManager lets you draw park and plaza outlines, mark entrances, choose game a
   <Dependency Id="79634" />
   <RequiredDLC Value="" />
   <ChangeLog>Park lakes (experimental): a lake is planned in the largest open space, excavated and filled with water, with an on/off switch. Larger parks get forest animal spawners. Large parks stay fully planted with more natural groves and boundary planting. Messages follow the game language. Fixes plaza furnishing for unmirrored boundary arrangements.</ChangeLog>
-  <AccessLevel Value="Private" />
+  <AccessLevel Value="Public" />
 </Publish>
