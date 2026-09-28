@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.5 – rc.1
 
 - Park lakes (experimental): parks find their largest open space between the paths and outline an organic lake with an 8 m shore strip; the overlay shows it in blue and planting keeps clear of it. After the park is built, the game's level brushes excavate the basin 5 m below the lowest shore point and a constant-level water source fills it 1 m below the shore. The water source is removed with the park; the basin is not yet refilled. A lake-bed surface follows. A "Lake: Off / On" switch in the surface step (default on) plans parks with or without a lake; it is locked once the furnishings are built.
 - Forest animal spawners: larger parks place the vanilla "Forest Animal Spawner" in their largest groves (one per 20,000 m², at most eight).
