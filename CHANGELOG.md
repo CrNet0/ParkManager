@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 – rc.1
 
 - Redesign the panel as a flat bar at the top of the screen, inspired by the Parking Lot Tool: the four-step wizard with its back and forward pages is gone. All settings stay reachable in coloured groups side by side (paths & surface, planting, furnishing; for plazas centerpiece, arrangement, surface & fence), and one main button always offers the next step: set entrances, plan, plan furnishings, build, finish. Outline and entrance editing switch in the header, next to the game's snapping options and the status line.
 - Furnishing assets and the plaza arrangement open in a dropdown window as wide as the bar instead of enlarging it; category chips carry a checkbox to include the category and a caret that opens its assets. The park lake is a checkbox chip next to trees and shrubs.
