@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.3 – rc.1
+
+- Fix parks getting stuck at "Choose a surface" with an empty surface list: surfaces without a preview image (their images usually come from Asset Icon Library, which may be missing or load late) are no longer dropped, and a grass surface is preselected, so the main button no longer waits for a choice the player cannot make.
+
 ## 0.7.2
 
 - Fix the UI module author in `UI/mod.json` (was a leftover template value).

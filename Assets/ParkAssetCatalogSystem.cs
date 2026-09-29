@@ -447,6 +447,14 @@ namespace ParkManager.Assets
                             StringComparison.Ordinal) && IsUiChoice(choice)) < 0);
             }
 
+            // Every park needs a ground surface. Preselect the vetted default
+            // so the workflow never waits for a choice the player cannot see.
+            var surfaces = _choices[ParkAssetCategory.Surface];
+            if (string.IsNullOrEmpty(_selected[ParkAssetCategory.Surface])
+                && surfaces.Count > 0)
+                _selected[ParkAssetCategory.Surface] =
+                    ChooseDefault(ParkAssetCategory.Surface, surfaces);
+
             var summary = new StringBuilder();
             foreach (var pair in _choices)
                 summary.Append(pair.Key).Append(' ').Append(pair.Value.Count)
@@ -694,15 +702,18 @@ namespace ParkManager.Assets
 
         /// <summary>
         /// Adds a classified prefab to the catalog. Bushes double as plaza
-        /// planters. Prefabs without a preview are skipped here, in the source
+        /// planters. Objects without a preview are skipped here, in the source
         /// catalog, so automatic placement cannot select assets the manual
-        /// picker would hide.
+        /// picker would hide. Surfaces are kept without one: their previews
+        /// often come from Asset Icon Library, and a missing or late icon must
+        /// not leave a park without any surface to build.
         /// </summary>
         private ParkAssetChoice Add(ParkAssetCategory category, PrefabBase prefab,
             Entity entity)
         {
             var icon = GetIcon(prefab);
-            if (string.IsNullOrWhiteSpace(icon)) return null;
+            if (string.IsNullOrWhiteSpace(icon)
+                && category != ParkAssetCategory.Surface) return null;
             var choice = new ParkAssetChoice
             {
                 Name = prefab.name,
@@ -836,10 +847,11 @@ namespace ParkManager.Assets
             Json.AppendString(builder, choice.Icon).Append('}');
         }
 
+        /// <summary>Every catalog entry is offered; <see cref="Add"/> already
+        /// dropped objects without a preview, and the UI draws a letter tile
+        /// for surfaces that have none.</summary>
         private static bool IsUiChoice(ParkAssetChoice choice)
-            => choice != null
-                && !string.IsNullOrWhiteSpace(choice.Name)
-                && !string.IsNullOrWhiteSpace(choice.Icon);
+            => choice != null && !string.IsNullOrWhiteSpace(choice.Name);
 
         private void Publish()
         {

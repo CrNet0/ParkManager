@@ -34,12 +34,12 @@ Source code and bug reports: https://github.com/tomkpunkt/ParkManager
   <Screenshot Value="Properties/Screenshots/03-built-park.jpg" />
   <Tag Value="Code Mod" />
   <ForumLink Value="" />
-  <ModVersion Value="0.7.2" />
+  <ModVersion Value="0.7.3" />
   <GameVersion Value="1.6.*" />
   <Dependency Id="74417" />
   <Dependency Id="79634" />
   <RequiredDLC Value="" />
-  <ChangeLog>Fix the UI module author. Includes the compact top bar from 0.7.0 and the new thumbnail and screenshots from 0.7.1.</ChangeLog>
+  <ChangeLog>Fix parks getting stuck at "Choose a surface" with an empty surface list: surfaces without a preview image are kept, and a grass surface is preselected.</ChangeLog>
   <ExternalLink Type="github" Url="https://github.com/tomkpunkt/ParkManager" />
   <AccessLevel Value="Public" />
 </Publish>
