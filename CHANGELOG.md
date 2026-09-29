@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.2
 
 - Fix the UI module author in `UI/mod.json` (was a leftover template value).
 

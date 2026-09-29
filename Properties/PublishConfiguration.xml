@@ -5,6 +5,8 @@
   <LongDescription>
 ParkManager lets you draw park and plaza outlines, mark entrances, choose game assets and preview procedural layouts before building them as editable Cities: Skylines II entities.
 
+A compact bar at the top of the screen keeps every setting in view, and one main button always offers the next step: set entrances, plan, build, finish. Asset choices open in a dropdown below the bar.
+
 **Parks**
 - Draw and edit a park boundary, then mark its entrances on the outline.
 - Generate pedestrian paths that follow the shape of the site, narrow or wide, with a selectable ground surface.
@@ -32,12 +34,12 @@ Source code and bug reports: https://github.com/tomkpunkt/ParkManager
   <Screenshot Value="Properties/Screenshots/03-built-park.jpg" />
   <Tag Value="Code Mod" />
   <ForumLink Value="" />
-  <ModVersion Value="0.7.1" />
+  <ModVersion Value="0.7.2" />
   <GameVersion Value="1.6.*" />
   <Dependency Id="74417" />
   <Dependency Id="79634" />
   <RequiredDLC Value="" />
-  <ChangeLog>New square thumbnail and screenshots. The mod package no longer ships unused images from earlier versions.</ChangeLog>
+  <ChangeLog>Fix the UI module author. Includes the compact top bar from 0.7.0 and the new thumbnail and screenshots from 0.7.1.</ChangeLog>
   <ExternalLink Type="github" Url="https://github.com/tomkpunkt/ParkManager" />
   <AccessLevel Value="Public" />
 </Publish>
