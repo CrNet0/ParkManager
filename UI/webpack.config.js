@@ -67,6 +67,8 @@ module.exports = {
   },
   output: {
     path: outputRoot,
+    // Start empty: stale images from older builds would ship with the mod.
+    clean: true,
     library: { type: "module" },
     publicPath: "coui://ui-mods/"
   },

@@ -1,6 +1,6 @@
 {
   "id": "ParkManager",
-  "author": "KruemelGames",
-  "version": "0.7.0",
+  "author": "tomkpunkt",
+  "version": "0.7.1",
   "dependencies": ["74417", "79634"]
 }

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Fix the UI module author in `UI/mod.json` (was a leftover template value).
+
+## 0.7.1
+
+- Paradox Mods page: square ParkManager thumbnail instead of the template image, three in-game screenshots (outline, planned preview, built park) and a GitHub link.
+- The UI build now starts from an empty output folder, so the mod no longer ships unused images from earlier versions (`arrow-left.svg`, `arrow-right.svg`, `refresh.svg`).
+
 ## 0.7.0 – rc.1
 
 - Redesign the panel as a flat bar at the top of the screen, inspired by the Parking Lot Tool: the four-step wizard with its back and forward pages is gone. All settings stay reachable in coloured groups side by side (paths & surface, planting, furnishing; for plazas centerpiece, arrangement, surface & fence), and one main button always offers the next step: set entrances, plan, plan furnishings, build, finish. Outline and entrance editing switch in the header, next to the game's snapping options and the status line.

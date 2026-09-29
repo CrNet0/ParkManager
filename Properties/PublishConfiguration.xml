@@ -27,13 +27,17 @@ Everything is previewed on the map before building. Built objects are normal gam
 Source code and bug reports: https://github.com/tomkpunkt/ParkManager
 </LongDescription>
   <Thumbnail Value="Properties/Thumbnail.png" />
+  <Screenshot Value="Properties/Screenshots/01-outline.jpg" />
+  <Screenshot Value="Properties/Screenshots/02-planned-preview.jpg" />
+  <Screenshot Value="Properties/Screenshots/03-built-park.jpg" />
   <Tag Value="Code Mod" />
   <ForumLink Value="" />
-  <ModVersion Value="0.7.0" />
+  <ModVersion Value="0.7.1" />
   <GameVersion Value="1.6.*" />
   <Dependency Id="74417" />
   <Dependency Id="79634" />
   <RequiredDLC Value="" />
-  <ChangeLog>New compact top bar replaces the four-step wizard: all settings side by side, one main button for the next step, asset choices in a dropdown below the bar, the lake as a checkbox. Uses the game tooltips and icons; fixes wrapped values and collapsed buttons in the game UI.</ChangeLog>
+  <ChangeLog>New square thumbnail and screenshots. The mod package no longer ships unused images from earlier versions.</ChangeLog>
+  <ExternalLink Type="github" Url="https://github.com/tomkpunkt/ParkManager" />
   <AccessLevel Value="Public" />
 </Publish>
