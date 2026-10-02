@@ -276,7 +276,15 @@ namespace ParkManager.Tools
                             ref nextId);
                         if (attachedArea < 1 || attachedMarkers
                             < _expectedAccessMarkers || !attachedSurface)
+                        {
+                            // Same timeout as the untagged case below.
+                            if (UnityEngine.Time.frameCount - _pathBuildStartedFrame
+                                <= MaterializationTimeoutFrames) return true;
+                            AbortPathBuild(UiText.Of("path.plazaEntitiesMissing",
+                                attachedArea, attachedMarkers,
+                                _expectedAccessMarkers, attachedSurface ? 1 : 0));
                             return true;
+                        }
                         applyMode = ApplyMode.Apply;
                         _pathApplyFrame = UnityEngine.Time.frameCount;
                         _pathBuildPhase = PathBuildPhase.ApplyRequested;

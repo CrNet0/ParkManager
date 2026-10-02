@@ -24,7 +24,9 @@ namespace ParkManager
             Log.Info($"ParkManager {Version} loaded.");
             updateSystem.UpdateAt<ParkManagerUISystem>(SystemUpdatePhase.UIUpdate);
             updateSystem.UpdateAt<ParkToolSystem>(SystemUpdatePhase.ToolUpdate);
-            updateSystem.UpdateAt<ParkAssetCatalogSystem>(SystemUpdatePhase.GameSimulation);
+            // Not GameSimulation: that phase does not tick while the game is
+            // paused, so a paused city would never receive its asset lists.
+            updateSystem.UpdateAt<ParkAssetCatalogSystem>(SystemUpdatePhase.UIUpdate);
             updateSystem.UpdateAt<ParkBundleNetworkCleanupSystem>(
                 SystemUpdatePhase.Modification2);
             updateSystem.UpdateAt<ParkBundleCleanupSystem>(

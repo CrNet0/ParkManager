@@ -111,10 +111,41 @@ namespace ParkManager.Assets
         {
             if (!_scanRequested || _prefabQuery.IsEmptyIgnoreFilter) return;
             _scanRequested = false;
-            Scan();
+            try
+            {
+                Scan();
+            }
+            catch (Exception exception)
+            {
+                // A failed scan must not leave the panel without any lists
+                // until the game restarts: publish what was collected. The
+                // next tool activation requests a fresh scan.
+                Mod.Log.Error(exception, "ParkManager asset catalog scan failed; "
+                    + "publishing the assets found so far.");
+                try
+                {
+                    Publish();
+                }
+                catch (Exception publishException)
+                {
+                    Mod.Log.Error(publishException,
+                        "ParkManager could not publish the partial asset catalog.");
+                }
+            }
         }
 
         internal void RequestRefresh() => _scanRequested = true;
+
+        /// <summary>
+        /// Prefab entities and installed asset packs can differ between saves,
+        /// so every loaded city gets its own scan.
+        /// </summary>
+        protected override void OnGameLoadingComplete(
+            Colossal.Serialization.Entities.Purpose purpose, GameMode mode)
+        {
+            base.OnGameLoadingComplete(purpose, mode);
+            _scanRequested = true;
+        }
 
         internal bool TryGetSelected(ParkAssetCategory category,
             out Entity prefab, out string name)
@@ -415,17 +446,42 @@ namespace ParkManager.Assets
         {
             foreach (var list in _choices.Values) list.Clear();
             using var entities = _prefabQuery.ToEntityArray(Allocator.Temp);
+            var failed = 0;
             for (var i = 0; i < entities.Length; i++)
             {
                 var entity = entities[i];
-                if (_prefabs.TryGetPrefab<PrefabBase>(entity, out var prefab)
-                    && prefab != null && !string.IsNullOrWhiteSpace(prefab.name)
-                    && TryClassifyParkAsset(entity, prefab, out var category))
-                    Add(category, prefab, entity);
+                // One broken prefab (a half-loaded asset pack, a missing DLC
+                // reference) must not empty every list in the panel.
+                try
+                {
+                    if (_prefabs.TryGetPrefab<PrefabBase>(entity, out var prefab)
+                        && prefab != null && !string.IsNullOrWhiteSpace(prefab.name)
+                        && TryClassifyParkAsset(entity, prefab, out var category))
+                        Add(category, prefab, entity);
+                }
+                catch (Exception exception)
+                {
+                    if (failed++ < 5)
+                        Mod.Log.Warn($"ParkManager skipped prefab {entity} "
+                            + $"while scanning assets: {exception}");
+                }
             }
+            if (failed > 0)
+                Mod.Log.Warn($"ParkManager skipped {failed} prefabs that could "
+                    + "not be classified.");
 
             // Resolve park variants before choosing the supported fence pool.
-            ScanVanillaParkPalettes(entities);
+            // Palettes are optional: without them the curated fallback is used.
+            try
+            {
+                ScanVanillaParkPalettes(entities);
+            }
+            catch (Exception exception)
+            {
+                _parkPalettes.Clear();
+                Mod.Log.Warn("ParkManager could not read the Vanilla park "
+                    + $"palettes; using the curated fallback: {exception}");
+            }
 
             // Prefer the native continuous fence system whenever the current
             // game/DLC set exposes it. Prop pieces remain a compatibility
@@ -550,9 +606,11 @@ namespace ParkManager.Assets
             for (var i = 0; i < component.m_SubObjects.Length; i++)
             {
                 var child = component.m_SubObjects[i]?.m_Object;
-                if (child == null) continue;
-                CollectPaletteObject(_prefabs.GetEntity(child), palette,
-                    visited, depth + 1);
+                // GetEntity throws for prefabs the game never registered,
+                // e.g. sub-objects of content that is not installed.
+                if (child == null
+                    || !_prefabs.TryGetEntity(child, out var childEntity)) continue;
+                CollectPaletteObject(childEntity, palette, visited, depth + 1);
             }
         }
 

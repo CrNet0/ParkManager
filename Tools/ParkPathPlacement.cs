@@ -350,7 +350,15 @@ namespace ParkManager.Tools
                             || attachedAreas < _expectedPathAreas
                             || !attachedParkSurface
                             || attachedMarkers < _expectedAccessMarkers)
+                        {
+                            // Tagging may lag a frame behind. Keep the timeout
+                            // so entities that never accept their tag cannot
+                            // leave the panel on "Building" forever.
+                            if (UnityEngine.Time.frameCount - _pathBuildStartedFrame
+                                <= MaterializationTimeoutFrames) return true;
+                            AbortPathBuild(UiText.Of("path.timeout"));
                             return true;
+                        }
 
                         LogTemporaryPathDiagnostics(_pedestrianPathPrefab);
                         applyMode = ApplyMode.Apply;
