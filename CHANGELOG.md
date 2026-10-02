@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Fix empty surface and asset lists (#5): the asset catalog now scans in the UI update phase instead of the game simulation phase, which does not run while the game is paused; it rescans after every loaded save, and a prefab that fails to classify is skipped instead of aborting the whole scan.
+- Fix parks staying on "Building" (#3): two materialization waits had no timeout, an exception inside a build step repeated every frame without ending the build, and build state survived loading another save. Build steps now cancel cleanly with an error message, and the workspace is reset when a game is loaded.
+
 ## 0.7.3 – rc.1
 
 - Fix parks getting stuck at "Choose a surface" with an empty surface list: surfaces without a preview image (their images usually come from Asset Icon Library, which may be missing or load late) are no longer dropped, and a grass surface is preselected, so the main button no longer waits for a choice the player cannot make.

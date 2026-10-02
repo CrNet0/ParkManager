@@ -140,9 +140,7 @@ namespace ParkManager.Tools
             var deps = base.OnUpdate(inputDeps);
             if (m_ToolSystem.activeTool != this) return deps;
             MonitorExternalPathEdits();
-            if (ProcessLakeBuild()) return Render(deps);
-            if (ProcessDecorationPlacement()) return Render(deps);
-            if (ProcessPathPlacement()) return Render(deps);
+            if (ProcessBuild()) return Render(deps);
 
             var inputAllowed = WorldInputAllowed();
             _hasHover = inputAllowed && TryGetGroundPoint(out _hover);
@@ -175,6 +173,101 @@ namespace ParkManager.Tools
                      && applyAction.WasPressedThisFrame()) HandleLeftClick();
 
             return Render(deps);
+        }
+
+        /// <summary>
+        /// Advances the running build by one frame. An exception inside a
+        /// build step would otherwise repeat every frame with the phase
+        /// unchanged, which shows as a panel that stays on "Building".
+        /// </summary>
+        private bool ProcessBuild()
+        {
+            try
+            {
+                return ProcessLakeBuild() || ProcessDecorationPlacement()
+                    || ProcessPathPlacement();
+            }
+            catch (Exception exception)
+            {
+                Mod.Log.Error(exception, "ParkManager build step failed in path phase "
+                    + $"{_pathBuildPhase}, decoration phase {_decorationBuildPhase}, "
+                    + $"lake phase {_lakeBuildPhase}; the build is cancelled.");
+                if (!BuildBusy) return false;
+                CancelFailedBuild(UiText.Of("status.buildFailed", exception.Message));
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Cancels through the regular abort paths so already materialized
+        /// entities are removed; falls back to a plain phase reset if the
+        /// cleanup itself fails.
+        /// </summary>
+        private void CancelFailedBuild(string reason)
+        {
+            _buildDecorationsAfterPaths = false;
+            try
+            {
+                if (LakeBuildBusy)
+                {
+                    DiscardLakeBrushes();
+                    _lakeBuildPhase = LakeBuildPhase.Idle;
+                    applyMode = ApplyMode.None;
+                    PublishState(reason);
+                    PublishDecorationState(reason);
+                }
+                if (DecorationBuildBusy
+                    && _decorationBuildPhase != DecorationBuildPhase.ClearRequested)
+                    AbortDecorationBuild(reason);
+                if (PathBuildBusy && _pathBuildPhase != PathBuildPhase.ClearRequested)
+                    AbortPathBuild(reason);
+            }
+            catch (Exception exception)
+            {
+                Mod.Log.Error(exception, "ParkManager build cleanup failed; "
+                    + "resetting the build state without further cleanup.");
+                ResetBuildPhases();
+                applyMode = ApplyMode.Clear;
+                PublishState(reason);
+                PublishPathBuildState(UiText.Of("path.failed", reason),
+                    PathBuildStatus.Error);
+                PublishDecorationState(reason);
+            }
+        }
+
+        /// <summary>Returns every build state machine to idle without touching entities.</summary>
+        private void ResetBuildPhases()
+        {
+            _buildDecorationsAfterPaths = false;
+            _preflightWarning = null;
+            _buildDefinitions.Clear();
+            _lakeBrushDefinitions.Clear();
+            _lakeBuildPhase = LakeBuildPhase.Idle;
+            _pathBuildPhase = PathBuildPhase.Idle;
+            _decorationBuildPhase = DecorationBuildPhase.Idle;
+            _pendingBuildRecord = Unity.Entities.Entity.Null;
+            ClearMaterializationBaselines();
+            ResetPendingDecorationBuild();
+        }
+
+        /// <summary>
+        /// The tool system outlives a loaded city, but its entity references
+        /// and build phases belong to the previous one. Without this reset a
+        /// build that was running (or stuck) before loading kept the panel on
+        /// "Building" in the newly loaded save.
+        /// </summary>
+        protected override void OnGameLoadingComplete(
+            Colossal.Serialization.Entities.Purpose purpose, Game.GameMode mode)
+        {
+            base.OnGameLoadingComplete(purpose, mode);
+            ResetBuildPhases();
+            _lastBuildRecord = Unity.Entities.Entity.Null;
+            applyMode = ApplyMode.None;
+            ResetWorkspaceDraft();
+            PublishState(UiText.Of("status.drawHint"));
+            PublishPathBuildState(UiText.Of("path.noParkThisSession"));
+            PublishDecorationState(UiText.Of("decoration.none"));
+            Mod.Log.Info("ParkManager reset its workspace for the loaded game.");
         }
 
         private bool TryGetGroundPoint(out float3 world)
