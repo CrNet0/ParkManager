@@ -1,6 +1,6 @@
 {
   "id": "ParkManager",
   "author": "tomkpunkt",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "dependencies": ["74417", "79634"]
 }

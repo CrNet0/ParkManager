@@ -71,6 +71,9 @@ namespace ParkManager.Assets
         // Keep the icon cycler payload bounded even when prefab-name matching
         // finds thousands of objects.
         private const int MaximumUiOptionsPerCategory = 120;
+        // Texture packs easily add more than a hundred ground surfaces; the
+        // surface row scrolls, so the picker may offer all of them.
+        private const int MaximumUiSurfaces = 600;
 
         // Composite planters keep their dedicated plaza category even though
         // some of them carry plant metadata.
@@ -248,7 +251,7 @@ namespace ParkManager.Assets
             var result = new List<string>();
             if (!_choices.TryGetValue(category, out var choices)) return result;
             for (var i = 0; i < choices.Count
-                && result.Count < MaximumUiOptionsPerCategory; i++)
+                && result.Count < UiLimit(category); i++)
             {
                 var usable = category == ParkAssetCategory.PlazaCenter
                     ? IsUsablePlazaCenter(choices[i], polygon)
@@ -517,6 +520,12 @@ namespace ParkManager.Assets
                     .Append(" · ");
             Mod.Log.Info($"ParkManager {Mod.Version} asset catalog: {summary}"
                 + $"park palettes {_parkPalettes.Count}");
+            // Surface reports ("my texture pack is missing") need the names.
+            var surfaceNames = new StringBuilder();
+            for (var i = 0; i < surfaces.Count; i++)
+                surfaceNames.Append(i == 0 ? "" : ", ").Append(surfaces[i].Name)
+                    .Append(string.IsNullOrWhiteSpace(surfaces[i].Icon) ? " (no icon)" : "");
+            Mod.Log.Info($"ParkManager surfaces ({surfaces.Count}): {surfaceNames}");
             foreach (var pair in _selected)
                 Mod.Log.Info($"ParkManager default {pair.Key}: "
                     + (string.IsNullOrEmpty(pair.Value) ? "(none)" : pair.Value));
@@ -648,8 +657,9 @@ namespace ParkManager.Assets
             if (prefab == null || string.IsNullOrWhiteSpace(prefab.name)
                 || prefab.name.IndexOf("placeholder", StringComparison.OrdinalIgnoreCase) >= 0)
                 return false;
+            // The area type alone identifies a ground surface; asset-pack
+            // surfaces do not always carry the Vanilla SurfaceData component.
             if (EntityManager.HasComponent<AreaGeometryData>(entity)
-                && EntityManager.HasComponent<SurfaceData>(entity)
                 && EntityManager.GetComponentData<AreaGeometryData>(entity).m_Type == AreaType.Surface)
                 return true;
             if (prefab is NetGeometryPrefab && IsNetworkFence(entity))
@@ -880,7 +890,7 @@ namespace ParkManager.Assets
                 // The catalog order is stable. Selection is represented only
                 // by selected/selectedMany and never moves a tile in the UI.
                 for (var i = 0; i < choices.Count
-                    && written < MaximumUiOptionsPerCategory; i++)
+                    && written < UiLimit(category); i++)
                 {
                     if (!IsUiChoice(choices[i])) continue;
                     if (written > 0) builder.Append(',');
@@ -891,6 +901,10 @@ namespace ParkManager.Assets
             }
             return builder.Append('}').ToString();
         }
+
+        private static int UiLimit(ParkAssetCategory category)
+            => category == ParkAssetCategory.Surface
+                ? MaximumUiSurfaces : MaximumUiOptionsPerCategory;
 
         private static bool IsMultiCategory(ParkAssetCategory category)
             => category == ParkAssetCategory.Tree

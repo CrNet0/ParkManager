@@ -34,12 +34,12 @@ Source code and bug reports: https://github.com/tomkpunkt/ParkManager
   <Screenshot Value="Properties/Screenshots/03-built-park.jpg" />
   <Tag Value="Code Mod" />
   <ForumLink Value="" />
-  <ModVersion Value="0.7.3" />
+  <ModVersion Value="0.7.4" />
   <GameVersion Value="1.6.*" />
   <Dependency Id="74417" />
   <Dependency Id="79634" />
   <RequiredDLC Value="" />
-  <ChangeLog>Fix parks getting stuck at "Choose a surface" with an empty surface list: surfaces without a preview image are kept, and a grass surface is preselected.</ChangeLog>
+  <ChangeLog>Remove a built park as a whole: pick any element in the tool. Deleting or replacing the ground surface no longer deletes the park. Fix empty lists while the game is paused, builds stuck on "Building", and surfaces missing from texture packs.</ChangeLog>
   <ExternalLink Type="github" Url="https://github.com/tomkpunkt/ParkManager" />
   <AccessLevel Value="Public" />
 </Publish>

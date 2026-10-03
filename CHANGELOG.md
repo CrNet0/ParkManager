@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.7.4 – rc.1
 
+- Show all ground surfaces (#2): the surface picker now offers up to 600 entries instead of 120, so texture packs no longer push surfaces off the list, and surfaces are recognised by their area type alone (asset-pack surfaces do not always carry the Vanilla `SurfaceData` component). Every scan logs the surfaces it found, so missing surfaces can be traced from `ParkManager.Mod.log`.
 - Remove a built park or plaza as a whole (#1, #4): with an empty workspace the action column offers "Remove a built park". Click any element of the park on the map (path, tree, bench, ground), all of its elements are highlighted, and "Remove park" deletes them together. The park is found through the tag its elements already carry; no outline or plan is stored for this.
 - The ground surface is no longer a deletion anchor (#1): bulldozing or replacing a park's surface with another tool (Better Bulldozer, Area Bucket) now affects only the surface instead of deleting the whole park.
 - Keep less data for finished parks: the edit-tracking baseline is dropped when a park is finished, and the record of a park is removed automatically once all of its elements were deleted by hand.
