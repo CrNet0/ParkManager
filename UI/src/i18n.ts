@@ -1,12 +1,14 @@
 import { de } from "./locales/de";
 import { en } from "./locales/en";
 import type { Texts } from "./locales/en";
+import { ptBR } from "./locales/pt-BR";
 
 export type { Texts };
 
 const translations: { [locale: string]: Texts } = {
   en,
   de,
+  "pt-BR": ptBR,
 };
 
 const languagePrefix = (locale: string): string => {
